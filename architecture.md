@@ -4,9 +4,12 @@ The STM32 CMake project is in `Massage_pen_FW/`. User code lives in `Massage_pen
 `Massage_pen_FW/User/Src`; `main.c` remains a minimal startup entry point.
 File skeletons exist for `app`, `charging`, `vibration`, `buttons`, `leds`,
 `sensors`, `power`, `heater`, `pid`, `watchdog`, and `storage`, with separate `mp2724` and
-`drv2624` drivers. APIs and implementation architecture remain undecided.
+`drv2624` drivers. Public APIs remain undecided; runtime control is unimplemented.
 HAL handles will be passed explicitly from `main.c`; values belong in `#define`
 macros in the relevant headers. Startup is not yet connected to user code.
+The [agreed runtime design](docs/superpowers/specs/2026-10-04-runtime-architecture-design.md)
+records current behaviour and module ownership; it supersedes earlier undecided
+runtime notes in the topic documents. APIs and implementation remain pending.
 
 Math rule: use integer or fixed-point arithmetic in firmware, with voltage in
 mV, temperature in mdegC, and resistance in mΩ where needed. The MCU has no FPU.
