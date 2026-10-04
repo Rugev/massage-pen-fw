@@ -3,10 +3,70 @@
 #define USER_CHARGING_H
 
 #define BATTERY_CELL_COUNT                      1U
+#define BATTERY_CAPACITY_MAH                    3000U
 #define BATTERY_MIN_MV                          2750U
 #define BATTERY_NOMINAL_MV                      3600U
 #define BATTERY_MAX_MV                          4200U
 #define BATTERY_MAX_CHARGE_CURRENT_MA           1400U
+
+/* Cell specification limits; temperature units are mdegC. */
+#define BATTERY_CHARGE_MIN_MDEGC                0
+#define BATTERY_CHARGE_MAX_MDEGC                45000
+#define BATTERY_DISCHARGE_MIN_MDEGC             (-20000)
+#define BATTERY_DISCHARGE_MAX_MDEGC             65000
+#define BATTERY_TERMINATION_CURRENT_MA          60U
+
+/* Intended setpoints, not factory defaults; no registers are written yet.
+ * Follow CC/D+/D- detection, applying the lower of the detected input limit
+ * and this USB ceiling. Battery charge current is limited separately above.
+ */
+#define CHARGER_USB_INPUT_MAX_MA                1500U
+#define CHARGER_SOURCE_DETECTION_ENABLED        1U
+#define CHARGER_SYS_MIN_MV                      2975U
+
+/* Pending manufacturer confirmation: verify both the pre-charge current and
+ * threshold, and whether deeply discharged cells may be recovered at all.
+ */
+#define CHARGER_PRECHARGE_CURRENT_MA            20U
+#define CHARGER_PRECHARGE_THRESHOLD_MV          2800U
+/* Trickle charging is disabled by selecting zero current. Check this setting
+ * and the permitted deep-discharge recovery procedure with the manufacturer.
+ */
+#define CHARGER_TRICKLE_CURRENT_MA              0U
+
+/* NTC1 is the battery sensor; PG retains its power-good function.
+ * Thresholds are nominal for the installed beta-3435 divider; hardware has
+ * hysteresis. The MCU must pause charging on warm/hot status and resume only
+ * below the warm threshold, if charging is still required and otherwise safe.
+ */
+#define CHARGER_NTC1_PROTECTION_ENABLED         1U
+#define CHARGER_NTC2_PROTECTION_ENABLED         0U
+#define CHARGER_COLD_THRESHOLD_MDEGC            5000
+#define CHARGER_COOL_THRESHOLD_MDEGC            15000
+#define CHARGER_COOL_CURRENT_PERCENT            33U
+#define CHARGER_WARM_PAUSE_THRESHOLD_MDEGC      40000
+/* Hardware fallback; exceeds the cell charging limit and does not replace
+ * the MCU warm cutoff. Watchdog expiry restores the factory NTC thresholds.
+ */
+#define CHARGER_HOT_THRESHOLD_MDEGC             50000
+
+/* Service while USB input is valid, including temperature pauses and the
+ * charge-complete state awaiting recharge. Disable on battery-only operation
+ * or before sleep; restore/check configuration following watchdog expiry.
+ */
+#define CHARGER_WATCHDOG_TIMEOUT_MS             40000U
+#define CHARGER_WATCHDOG_SERVICE_INTERVAL_MS    10000U
+#define CHARGER_WATCHDOG_ON_BATTERY_ONLY         0U
+#define CHARGER_WATCHDOG_DURING_THERMAL_PAUSE    1U
+
+#define CHARGER_BOOST_ENABLED                   0U
+#define CHARGER_BATTFET_RESET_ENABLED           1U
+#define CHARGER_SHIPPING_DELAY_ENABLED          0U
+#define CHARGER_PARAMETER_LOCK_ENABLED          1U
+/* Writable INT_MASK bits only: all maskable events enabled. Preserve the
+ * reserved bits when constructing the register write.
+ */
+#define CHARGER_INTERRUPT_MASK_BITS             0U
 
 /* Public API and implementation remain undecided. */
 

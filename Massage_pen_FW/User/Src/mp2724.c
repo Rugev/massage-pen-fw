@@ -1,3 +1,42 @@
 #include "mp2724.h"
 
-/* Skeleton: implementation will be defined later. */
+/* Register metadata only: values/encodings and field notes live in mp2724.h.
+ * Skip the undocumented gap; do not use array index as a register address.
+ * No writes are issued and no factory default is applied to the board.
+ */
+#define MP2724_CONFIG_INFO(name) { \
+    MP2724_REG_##name, MP2724_##name##_RESET_DEFAULT, UINT8_MAX, \
+    MP2724_##name##_WRITABLE_MASK, MP2724_##name##_COMMAND_MASK \
+}
+#define MP2724_STATUS_INFO(name) { \
+    MP2724_REG_##name, 0U, 0U, \
+    MP2724_##name##_WRITABLE_MASK, MP2724_##name##_COMMAND_MASK \
+}
+
+const mp2724_register_info_t mp2724_registers[MP2724_REGISTER_COUNT] = {
+    MP2724_CONFIG_INFO(CHG_CTRL0),
+    MP2724_CONFIG_INFO(IIN),
+    MP2724_CONFIG_INFO(CHG_PARAMETER0),
+    MP2724_CONFIG_INFO(CHG_PARAMETER1),
+    MP2724_CONFIG_INFO(CHG_PARAMETER2),
+    MP2724_CONFIG_INFO(CHG_PARAMETER3),
+    MP2724_CONFIG_INFO(CHG_CTRL1),
+    MP2724_CONFIG_INFO(CHG_CTRL2),
+    MP2724_CONFIG_INFO(CHG_CTRL3),
+    MP2724_CONFIG_INFO(CHG_CTRL4),
+    MP2724_CONFIG_INFO(VIN_DET),
+    MP2724_CONFIG_INFO(CHG_CTRL5),
+    MP2724_CONFIG_INFO(NTC_ACTION),
+    MP2724_CONFIG_INFO(NTC_TH),
+    MP2724_CONFIG_INFO(VIN_IMPD),
+    MP2724_CONFIG_INFO(INT_MASK),
+    MP2724_STATUS_INFO(STATUS0),
+    MP2724_STATUS_INFO(STATUS1),
+    MP2724_STATUS_INFO(STATUS2),
+    MP2724_STATUS_INFO(STATUS3),
+    MP2724_STATUS_INFO(STATUS4),
+    MP2724_STATUS_INFO(STATUS5),
+};
+
+#undef MP2724_CONFIG_INFO
+#undef MP2724_STATUS_INFO

@@ -12,3 +12,5 @@ with matching headers in `Massage_pen_FW/User/Inc`. APIs and control behavior re
 Motor: LRA with driver frequency tracking. Nominal frequency, maximum sine-wave
 RMS voltage and four levels (off plus three voltages) are in `Massage_pen_FW/User/Inc/vibration.h`.
 I2C address is in `Massage_pen_FW/User/Inc/drv2624.h`.
+
+IC operation and programming caveats: [DRV2624 guide](drv2624.md).
