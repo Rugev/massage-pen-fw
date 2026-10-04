@@ -15,3 +15,7 @@ Battery: 1S Li-ion. Voltage range, nominal voltage and maximum charging current
 are configurable in `User/Inc/charging.h`; address is in `User/Inc/mp2724.h`.
 Battery voltage is twice the ADC input voltage; the configurable multiplier
 is in `User/Inc/sensors.h`.
+
+Request complete battery disconnection through the charger at
+`BATTERY_DISCONNECT_MV` in `User/Inc/power.h`; the higher `BATTERY_STANDBY_MV`
+requests Standby only. The disconnect command remains to be implemented.

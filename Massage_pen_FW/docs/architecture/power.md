@@ -12,5 +12,8 @@ Power sequencing, low-power implementation and safety design will be decided lat
 
 `SYS_ON` low disables the vibration motor, battery sensing resistors, heater
 and temperature feedback. Operate only while `SYS_PG` is high; keep checking
-it during operation. Shut down the system at the battery threshold in
-`User/Inc/power.h`, which also records MCU supply voltage and signal polarities.
+it during operation. Enter Standby at `BATTERY_STANDBY_MV`; at the lower
+`BATTERY_DISCONNECT_MV`, request complete battery disconnection through the charger.
+Both thresholds are in `User/Inc/power.h`, along with MCU supply and polarities.
+Voltage monitoring in Standby remains to be designed because `SYS_ON` disables
+the battery sensing resistors.
