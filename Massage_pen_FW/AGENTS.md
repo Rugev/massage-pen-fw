@@ -2,7 +2,9 @@
 
 - Read `architecture.md`, then only the topic documents needed for the task.
 - Keep documentation minimal: agreed requirements and code references only.
-  Leave undecided architecture and interfaces open.
+  Do not duplicate header constants or generated configuration, add lengthy
+  explanations, or record unagreed design decisions. Leave undecided architecture
+  and interfaces open; link to source files for details.
 - Put user headers in `User/Inc` and C sources in `User/Src`. Keep `main.c`
   minimal, using it to start the application.
 - Do not modify `Drivers/` or `Core/`, except `Core/Src/main.c`.
@@ -18,8 +20,7 @@
 - Pass HAL handles explicitly from `main.c` when initialization is implemented.
 - Keep hardware values and tunable constants as `#define` macros in the relevant
   user `.h` files; use existing generated definitions for pins and ports.
-- Prefer integer/fixed-point firmware math; use mV and mdegC for voltage and
-  temperature. Floating-point calculations may be used in host generation scripts.
+- Follow the integer-math rule in `architecture.md`.
 - Build only Debug with `./build.sh`. Keep build artifacts out of version control.
 - Verify changes appropriately and report what was actually checked. Preserve
   unrelated user changes and do not invent hardware constants or settings.

@@ -3,13 +3,15 @@
 This STM32 embedded C project uses CMake. User code lives in `User/Inc` and
 `User/Src`; `main.c` remains a minimal startup entry point.
 File skeletons exist for `app`, `charging`, `vibration`, `buttons`, `leds`,
-`sensors`, `power`, `heater`, `pid`, and `watchdog`, with separate `mp2724` and
+`sensors`, `power`, `heater`, `pid`, `watchdog`, and `storage`, with separate `mp2724` and
 `drv2624` drivers. APIs and implementation architecture remain undecided.
 HAL handles will be passed explicitly from `main.c`; values belong in `#define`
 macros in the relevant headers. Startup is not yet connected to user code.
 
-Prefer integer/fixed-point firmware math: voltage in mV, temperature in mdegC,
-and resistance in mΩ where needed. The MCU has no FPU.
+Math rule: use integer or fixed-point arithmetic in firmware, with voltage in
+mV, temperature in mdegC, and resistance in mΩ where needed. The MCU has no FPU.
+Use sufficiently wide intermediate values to avoid overflow. Any runtime
+floating-point exception requires agreement; host generation scripts may use it.
 
 Read `AGENTS.md` for editing rules. Use the tiers below to load only relevant context:
 
@@ -25,3 +27,4 @@ Read `AGENTS.md` for editing rules. Use the tiers below to load only relevant co
 | Heater PID and temperature reading | [Heater](docs/architecture/heater.md) |
 | System power, wake, watchdogs | [Power](docs/architecture/power.md) |
 | Three buttons and eight LED outputs | [UI](docs/architecture/ui.md) |
+| Persist requested vibration and heat levels | [Storage](docs/architecture/storage.md) |

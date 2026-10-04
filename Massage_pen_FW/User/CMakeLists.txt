@@ -17,4 +17,5 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Src/heater.c
     Src/pid.c
     Src/watchdog.c
+    Src/storage.c
 )
