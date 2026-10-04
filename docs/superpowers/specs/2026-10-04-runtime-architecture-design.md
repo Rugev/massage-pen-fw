@@ -104,6 +104,8 @@ when shutdown policy applies. Exactly the standby threshold does not permit enab
 - Apply integer low-pass filtering to valid measurements for control. Use
   unfiltered measurements for electrical validity and heater temperature protection.
   Initialize filters from the first valid pair after sensing is restored.
+  Use coefficient 1/16: filtered += (sample - filtered) / 16, retaining fractional
+  precision in fixed-point state.
 - Allow 10 ms settling after SYS_PG becomes good before initial acquisition.
 - I2C timeout: 5 ms per transfer. Retry after 5 ms and completion/abort of the
   previous transfer; a configuration attempt includes write and readback.
@@ -224,8 +226,7 @@ Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
 - Battery-only STATUS3 freshness remains unresolved; do not assume live NTC data.
 - Detailed charging implementation, remaining charger settings and charging LED
   policy are separate work; preserve [existing charging requirements](../../architecture/charging.md).
-- Agree the low-pass filter coefficient. Validate provisional electrical validity
-  limits and tune heater gains on hardware.
+- Validate provisional electrical validity limits and tune heater gains on hardware.
 - Agree the validated motor configuration/calibration timing and MCU watchdog.
 - Select a RAM-retaining low-power mode and verify wake/reset wiring and generated
   configuration. Report any required protected-file changes; do not hand-edit them.
