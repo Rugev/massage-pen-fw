@@ -53,3 +53,9 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Firmware build and local artifacts
+/Massage_pen_FW/build/
+/Massage_pen_FW/**/mx.scratch
+__pycache__/
+*.pdf

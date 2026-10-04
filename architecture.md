@@ -1,7 +1,7 @@
 # Firmware context
 
-This STM32 embedded C project uses CMake. User code lives in `User/Inc` and
-`User/Src`; `main.c` remains a minimal startup entry point.
+The STM32 CMake project is in `Massage_pen_FW/`. User code lives in `Massage_pen_FW/User/Inc` and
+`Massage_pen_FW/User/Src`; `main.c` remains a minimal startup entry point.
 File skeletons exist for `app`, `charging`, `vibration`, `buttons`, `leds`,
 `sensors`, `power`, `heater`, `pid`, `watchdog`, and `storage`, with separate `mp2724` and
 `drv2624` drivers. APIs and implementation architecture remain undecided.
