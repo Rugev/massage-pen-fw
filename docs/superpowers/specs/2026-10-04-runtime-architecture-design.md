@@ -73,7 +73,7 @@ normal operation and selects Charging with input present, otherwise Sleep.
 
 Thresholds are in [power.h](../../../Massage_pen_FW/User/Inc/power.h).
 Heating and vibration require voltage above the standby threshold and a qualifying
-enable press. Falling below that threshold ends normal operation; voltage recovery
+enable press. At or below that threshold ends normal operation; voltage recovery
 alone does not resume it.
 
 Without input, apply the standby/disconnect shutdown policy. With input and low
@@ -87,6 +87,41 @@ notice before entering Charging; charging management continues. Keep SYS_ON
 enabled for a Charging destination. For a Sleep destination, disable SYS_ON
 immediately, display the notice, then sleep. The lower disconnect threshold
 requests immediate shipping when shutdown policy applies.
+Equality applies to the disconnect threshold too: at or below it, request shipping
+when shutdown policy applies. Exactly the standby threshold does not permit enable.
+
+## Acquisition and timing
+
+- Acquire one fresh battery/tip pair every 1 ms. Each app loop consumes the
+  previous completed pair and triggers the next acquisition, which must complete
+  before the following loop. Use a circular ADC buffer with half/full callbacks.
+  Publish completed frames for foreground consumption without reading a half
+  currently being written. ADC operation must not free-run faster than this cadence.
+- A missing/failed frame counts once per scheduled acquisition; fault after ten
+  consecutive failures, separately per channel. A valid acquisition resets its
+  channel count. The next-loop completion requirement replaces the earlier
+  proposed 2 ms conversion timeout; retries use the next 1 ms acquisition slot.
+- Apply integer low-pass filtering to valid measurements for control. Use
+  unfiltered measurements for electrical validity and heater temperature protection.
+  Initialize filters from the first valid pair after sensing is restored.
+- Allow 10 ms settling after SYS_PG becomes good before initial acquisition.
+- I2C timeout: 5 ms per transfer. Retry after 5 ms and completion/abort of the
+  previous transfer; a configuration attempt includes write and readback.
+- Poll charger/driver status every 100 ms; charger interrupts also prompt reads.
+- Heater control updates every 50 ms. Evaluate heater temperature protections
+  on every completed valid tip measurement, independently of PID timing.
+- Button debounce: 20 ms stable input for press and release.
+
+Initial electrical validity limits are provisional for bench validation:
+tip ADC input within 20 mV of either rail faults; battery above 4500 mV faults.
+Do not assign a lower battery sensor-fault cutoff; valid low voltage follows
+shutdown policy. Normalize the configured oversampled ADC results before
+conversion. Values will be defined in [sensors.h](../../../Massage_pen_FW/User/Inc/sensors.h).
+
+The current generated ADC configuration lacks circular DMA and a two-channel
+sequence. Implementing the requested buffer requires ADC sequencing, circular
+DMA setup and DMA interrupt routing. These protected configuration changes must
+be made through the user's CubeMX workflow; generated files are not hand-edited.
 
 ## User interface
 
@@ -113,16 +148,26 @@ Heater uses battery-compensated power control, fixed-point PID with integral
 anti-windup, and extra negative feedback above target. Current ceilings refer
 to average current: 1 A for charger cool status or tip below 10 degrees,
 otherwise 2 A. Update the ceiling when these conditions change.
+At exactly 10 degrees, the tip condition alone does not reduce the ceiling.
 
 Select preheat/precool only on heating enable or target change. Below target
 minus 2 degrees, preheat at maximum permitted power until that boundary.
 Above target plus 2 degrees, precool with power off until that boundary.
 Otherwise enter PID; ordinary disturbances do not re-enter preheat/precool.
+Exactly either transition boundary selects PID on enable/target change.
 
 Split the existing absolute-temperature protection into a 49-degree power
 inhibit and a 49.5-degree latched fault. After inhibition, resume PID only below
 target, with integral handling to avoid windup. Hardware overheat protection
 remains independent. Put these values in [heater.h](../../../Massage_pen_FW/User/Inc/heater.h).
+Both protection thresholds trigger at equality as well as above.
+
+Provisional bench-tuning gains: proportional 500 mW/degree, integral
+20 mW/(degree second), derivative zero initially. Double proportional feedback
+for negative temperature error. Use conditional integration against the actual
+voltage/current-limited output, allowing integration that exits saturation.
+Final gains require measured tip response; define them in
+[pid.h](../../../Massage_pen_FW/User/Inc/pid.h).
 
 Vibration uses constant-amplitude closed-loop operation. On normal-operation
 entry check driver errors and load/verify configuration. On the first nonzero
@@ -154,14 +199,33 @@ See [DRV2624 requirements](../../architecture/drv2624.md).
 - Ignore the usual 1 s shutdown gesture in fault states. A 10 s button hold
   provides the hardware power reset through the charger.
 
+Latch the first detected fault. For faults detected in the same app cycle,
+use the code order below as priority. Subsequent faults do not replace the code.
+Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
+
+| Code | Fault |
+| --- | --- |
+| 1 | Heater fault temperature |
+| 2 | Invalid tip sensor |
+| 3 | Invalid battery voltage |
+| 4 | SYS_PG timeout |
+| 5 | SYS_PG lost |
+| 6 | Battery hot |
+| 7 | Battery cold |
+| 8 | Charger-reported error |
+| 9 | Vibration-controller error |
+| 10 | Charger communication/readback failure |
+| 11 | Vibration communication/readback failure |
+| 12 | ADC acquisition failure |
+| 13 | Vibration calibration failure |
+
 ## Open items for planning
 
 - Battery-only STATUS3 freshness remains unresolved; do not assume live NTC data.
 - Detailed charging implementation, remaining charger settings and charging LED
   policy are separate work; preserve [existing charging requirements](../../architecture/charging.md).
-- Agree ADC sample timing/validity limits, acquisition and I2C timeout/retry timing,
-  PID cadence/gains/extra feedback, button debounce, fault code assignments/bit
-  order, simultaneous-fault priority, and exact voltage-threshold equality behaviour.
+- Agree the low-pass filter coefficient. Validate provisional electrical validity
+  limits and tune heater gains on hardware.
 - Agree the validated motor configuration/calibration timing and MCU watchdog.
 - Select a RAM-retaining low-power mode and verify wake/reset wiring and generated
   configuration. Report any required protected-file changes; do not hand-edit them.
