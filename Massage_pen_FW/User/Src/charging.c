@@ -235,6 +235,10 @@ static void consume_result(I2C_DeviceResult result)
 {
     if (operation == OP_NONE || result.state == I2C_RESULT_PENDING || result.state == I2C_RESULT_IDLE) return;
     if (result.exhausted) {
+        /* Permission ends at health exhaustion; physical ownership still drains. */
+        charge_target = false; observation.admitted = false;
+        ipre_target = 0U; arm_stage = ARM_IDLE;
+        precharge_seen = phase_known = false; baseline_required = true;
         enable_known = ipre_known = lock_known = false; refresh_baseline();
         observation.communication_fault = true;
         observation.configuration_ready = false;

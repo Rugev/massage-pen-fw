@@ -389,8 +389,37 @@ static void demand_without_adc_cannot_enable(void)
  Charging_Profile p=profile();reset(&p);Charging_SetEligibility(false,1U,false,false);ready();run(100);
  assert(!(regs[9]&MP2724_EN_CHG_MASK));
 }
+static void exhausted_drain_revokes_admission_immediately(void)
+{
+ for(unsigned arming=0U;arming<2U;arming++) {
+  Charging_Profile p=profile();reset(&p);ready();run(40);
+  assert(Charging_GetObservation().admitted);
+  if(arming) {
+   regs[0x13]=MP2724_CHG_STAT_PRECHARGE<<MP2724_CHG_STAT_SHIFT;
+   Charging_OnInterrupt();run(40);Charging_SetEligibility(true,2U,false,false);
+  } else Charging_OnInterrupt();
+  for(unsigned i=0;i<100U;i++) {
+   Charging_Update(available);
+   if(pending && (arming ? (writing && reg==3U) : (!writing && reg==1U && leased)))break;
+   if(pending)complete();
+   FakeHAL_AdvanceTick(1U);
+  }
+  assert(pending);uint8_t *owned_buffer=buffer;bool owned_lease=leased;
+  drain_ready=false;run(35U);
+  I2C_DeviceResult result=MP2724_GetResult();
+  assert(result.exhausted && result.recovering);
+  Charging_Observation o=Charging_GetObservation();
+  assert(o.communication_fault && o.recovering && !o.admitted);
+  assert(!o.active_charging && !o.safe_baseline_ready && !o.configuration_ready);
+  assert(pending && buffer==owned_buffer && leased==owned_lease);
+  unsigned count=trace_count;run(20U);assert(trace_count==count);
+  drain_ready=true;run(40U);
+  assert(!Charging_GetObservation().admitted && !Charging_GetObservation().safe_baseline_ready);
+ }
+}
 int main(void)
 {
+ exhausted_drain_revokes_admission_immediately();
  completed_precharge_return_does_not_rearm();
  nonprecharge_and_ineligible_never_raise_current();
  admitted_precharge_requires_new_adc();
