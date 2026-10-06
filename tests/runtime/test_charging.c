@@ -494,7 +494,15 @@ static void revocation_at_each_arming_write(void)
   if(mode==2U)assert(!o.configuration_ready);
   if(mode==4U)assert(o.configuration_ready);
   /* Requalifying the same battery generation cannot reuse the old epoch. */
-  if(mode!=2U && mode!=3U) {
+  if(mode==1U || mode==4U) {
+   /* Test the original boundary directly, without an extra invalid-ADC epoch.
+    * Normal entry published generation 3; restart retained generation 2. */
+   uint32_t retained=mode==1U?3U:2U;
+   Charging_SetEligibility(true,retained,false,false);Charging_OnInterrupt();run(180U);
+   assert(Charging_GetObservation().precharge_target_ma==0U);
+   Charging_SetEligibility(true,retained+1U,false,false);run(80U);
+   assert(Charging_GetObservation().precharge_current_ma==CHARGER_PRECHARGE_OPERATING_CURRENT_MA);
+  } else if(mode!=2U && mode!=3U) {
    Charging_SetEligibility(false,3U,false,false);run(40U);
    regs[0x12]=0x60U;regs[0x14]=0U;
    Charging_SetEligibility(true,3U,false,false);Charging_OnInterrupt();run(180U);
@@ -596,8 +604,19 @@ static void fault_reconciles_unadmitted_device(void)
   assert(o.parameter_lock_known && o.parameter_locked && !o.configuration_ready);
  }
 }
+static void fault_immediately_revokes_verified_sleep_readiness(void)
+{
+ Charging_Profile p=profile();reset(&p);ready();Charging_RequestPrepareSleep();run(60U);
+ assert(Charging_GetObservation().sleep_ready && MP2724_GetResult().state==I2C_RESULT_IDLE);
+ Charging_SetEligibility(false,2U,false,true);
+ Charging_Observation o=Charging_GetObservation();
+ assert(!o.sleep_ready && !o.safe_baseline_ready && !o.inhibit_known);
+ run(60U);o=Charging_GetObservation();
+ assert(o.sleep_ready && o.safe_baseline_ready && o.inhibit_known && o.inhibited);
+}
 int main(void)
 {
+ fault_immediately_revokes_verified_sleep_readiness();
  fault_reconciles_unadmitted_device();
  failed_parameter_transactions_latch();
  watchdog_rollover_and_restart_active_device();

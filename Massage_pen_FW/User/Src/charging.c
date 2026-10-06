@@ -456,6 +456,7 @@ static void revoke_admission(void)
 }
 static void reconcile_fault(void)
 {
+    observation.sleep_ready = false;
     revoke_admission();
     baseline_required = true;
     enable_known = ipre_known = lock_known = false;
