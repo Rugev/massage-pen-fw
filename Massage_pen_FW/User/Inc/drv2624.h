@@ -4,7 +4,7 @@
  * WRITABLE_MASK covers documented functional fields, excluding reserved bits,
  * even where TI labels reserved bits R/W. Preserve reserved bits.
  * R/W unless a field comment says R. Hardware updates calibration and GO fields.
- * No transport, initialization, actuator settings or application policy.
+ * Initialization, actuator settings and application policy remain application-owned.
  */
 #ifndef USER_DRV2624_H
 #define USER_DRV2624_H
@@ -1193,5 +1193,52 @@
 #define DRV2624_RAM_TIME_MAX_TICKS                          255U
 #define DRV2624_TIME_OFFSET_MIN                             (-128)
 #define DRV2624_TIME_OFFSET_MAX                             127
+
+#include "i2c_device.h"
+/* Initialize once before starting; Update is foreground, callbacks are ISR.
+ * Requests reject unavailable/busy/unacknowledged results and invalid masks.
+ * Config preserves reserved bits and compares only requested fields. Caller
+ * validates field encodings. Ordinary config rejects registers containing
+ * autonomously updated fields regardless of the targeted mask. Exhaustion latches until reboot/init.
+ * Commands are separate: ACCEPTED means write ACK and an observation, never
+ * proof of side-effect completion. UNCERTAIN requires caller reconciliation;
+ * automatic retries cannot replay a possibly transmitted command write.
+ * GetResult is retained; Acknowledge permits the next request only after all
+ * callback/buffer ownership has ended. recovering reports retained ownership;
+ * exhaustion can become terminal before recovery drains. Keep calling Update.
+ * Cancel polls/drains through Update.
+ */
+void DRV2624_Init(I2C_HandleTypeDef *handle, const I2C_DeviceOps *ops);
+bool DRV2624_RequestRead(uint8_t reg);
+bool DRV2624_RequestConfig(uint8_t reg, uint8_t mask, uint8_t value);
+/* Caller asserts an idle ownership lease for the ENTIRE addressed register,
+ * from prerequisite read through verification (including retries), or through
+ * cancellation/abort drain. Hold hardware autonomous activity stopped until
+ * result is terminal AND recovering=false; do not infer release from a terminal
+ * command/health result alone. Every write of these registers needs the lease:
+ * A_CAL_COMP, A_CAL_BEMF, FEEDBACK_CONTROL: calibration must be quiescent,
+ * including gain changes even when only NG_THRESH or other fields are targeted.
+ * Unqualified ordinary RequestConfig rejects these registers without transfer.
+ * This API asserts caller ownership; it does not stop hardware autonomously. */
+bool DRV2624_RequestConfigIdle(uint8_t reg, uint8_t mask, uint8_t value);
+bool DRV2624_RequestCommand(uint8_t reg, uint8_t mask, uint8_t value);
+void DRV2624_Update(void);
+I2C_DeviceResult DRV2624_GetResult(void);
+bool DRV2624_Acknowledge(void);
+void DRV2624_Cancel(void);
+void DRV2624_OnReadComplete(I2C_HandleTypeDef *handle);
+void DRV2624_OnWriteComplete(I2C_HandleTypeDef *handle);
+void DRV2624_OnError(I2C_HandleTypeDef *handle);
+
+/* STATUS is read-to-clear: RequestRead(STATUS) rejects; only this acquisition
+ * path reads it. Consumers share flags ORed since status acknowledgment and
+ * an observation sequence. A request after acknowledging the operation result
+ * begins a new observation. */
+typedef struct { bool valid; uint8_t value; uint32_t sequence; } DRV2624_StatusSnapshot;
+bool DRV2624_RequestStatus(void);
+DRV2624_StatusSnapshot DRV2624_GetStatus(void);
+/* Coordinator acknowledges only after every consumer processed this sequence.
+ * Clears retained flags only if no newer observation arrived. */
+bool DRV2624_AcknowledgeStatus(uint32_t sequence);
 
 #endif /* USER_DRV2624_H */

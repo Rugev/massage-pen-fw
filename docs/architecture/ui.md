@@ -1,17 +1,33 @@
 # Buttons and LEDs
 
-Read three button inputs and control eight LED outputs. Charging displays
-battery charge; Normal operation monitors buttons and sets LEDs.
+[buttons.c](../../Massage_pen_FW/User/Src/buttons.c) debounces press and release
+edges and retains press identities/durations for
+[app.c](../../Massage_pen_FW/User/Src/app.c) to interpret. The qualifying power
+hold requests enable during validation or charging; a fresh shutdown hold ends
+normal operation. One press cannot both enable and disable. A waking power press
+counts after debounce; releasing early still allows validation to finish. Fault
+states ignore ordinary gestures; the long hardware-reset hold is a charger
+function.
 
-Use definitions from [main.h](../../Massage_pen_FW/Core/Inc/main.h):
+Heat/vibration release clicks strictly between the click-duration limits cycle
+requested levels only during normal operation. Session expiry ends the whole
+session; level changes and input-power transitions do not reset it. Keeping both
+requested levels zero also ends the session after its separate idle limit.
+Gesture/session constants are in [app.h](../../Massage_pen_FW/User/Inc/app.h),
+and debounce/polarity definitions are in
+[buttons.h](../../Massage_pen_FW/User/Inc/buttons.h).
 
-- Buttons: `BUTTON_PWR_ON_Pin`, `BUTTON_VIBRATION_Pin`, `BUTTON_HEAT_Pin`.
-- Battery LEDs: `BAT_LED_R_Pin`, `BAT_LED_G_Pin`.
-- Heat LEDs: `LED_HEAT_1_Pin`, `LED_HEAT_2_Pin`, `LED_HEAT_3_Pin`.
-- Vibration LEDs: `LED_VIBRATION_1_Pin`, `LED_VIBRATION_2_Pin`, `LED_VIBRATION_3_Pin`.
+[leds.c](../../Massage_pen_FW/User/Src/leds.c) renders the app-requested display:
+level LEDs indicate requested heat/vibration levels, with heat LEDs breathing
+during preheat/precool and solid during PID operation. Low-battery notice flashes
+the red battery LED; fault display flashes red while the heat/vibration outputs
+show the solid fault-code bits, heat first. Identical display requests preserve
+pattern phase. Pattern constants and polarity are in
+[leds.h](../../Massage_pen_FW/User/Inc/leds.h); fault priority is defined by
+[app.c](../../Massage_pen_FW/User/Src/app.c).
 
-Consult the read-only [.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) for configuration.
-Button gestures, LED patterns and implementation structure will be decided later.
-
-LEDs and buttons are active high, configurable in `Massage_pen_FW/User/Inc/leds.h` and
-`Massage_pen_FW/User/Inc/buttons.h`. Heat/vibration levels 0..3 correspond to 0..3 LEDs lit.
+Charging while normal uses the normal-operation display. Detailed charging-only
+LED policy remains unresolved; the current app requests LEDs off in charging and
+recovery states. Pins and ports for all buttons/LEDs come from
+[main.h](../../Massage_pen_FW/Core/Inc/main.h); consult the read-only
+[.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) for generated configuration.

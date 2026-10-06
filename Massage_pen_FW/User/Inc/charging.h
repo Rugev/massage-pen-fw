@@ -68,6 +68,58 @@
  */
 #define CHARGER_INTERRUPT_MASK_BITS             0U
 
-/* Public API and implementation remain undecided. */
+#include <stdbool.h>
+#include <stdint.h>
+#define CHARGER_INTERRUPT_ACTIVE_HIGH          0U
+#define CHARGING_POLL_INTERVAL_MS               100U
+#define CHARGING_STATUS_MAX_AGE_MS              110U
+#define CHARGING_CONFIG_REGISTER_COUNT          16U
+
+/* Nonblocking board adapter reserves hardware autonomy for the whole register transaction.
+ * IIN: block detection/restart/CC changes. CHG_CTRL3: prevent discharge/OCP.
+ * Lease lasts through preread, retries, verification and cancellation drain.
+ * Missing adapters leave readiness false; a VIN_RDY sample is not a lease. */
+typedef struct {
+    bool (*acquire)(uint8_t reg);
+    void (*release)(uint8_t reg);
+} Charging_IdleOps;
+/* Explicit complete, reviewed board settings in MP2724 catalogue order (first
+ * 16 entries, skipping undocumented 0x0B). Reserved/action bits must be zero.
+ * No default board profile is supplied. Caller storage must outlive module. */
+typedef struct {
+    bool agreed;
+    uint8_t registers[CHARGING_CONFIG_REGISTER_COUNT];
+    const Charging_IdleOps *idle;
+} Charging_Profile;
+typedef struct {
+    bool profile_valid, configuration_ready, status_ready;
+    bool input_valid, input_ready, active_charging, topoff_active;
+    uint8_t phase, ntc1, status[6];
+    bool ntc_fresh, cold, hot, cool, warm, paused, completed;
+    bool charger_fault, watchdog_fault, communication_fault;
+    bool recovering, sleep_ready, shipping_requested, shipping_accepted, shipping_uncertain;
+    bool idle_lease;
+    uint8_t idle_register;
+    uint32_t status_sequence, status_ms;
+} Charging_Observation;
+/* MP2724_Init is owned by startup and must precede this initialization. */
+void Charging_Init(const Charging_Profile *profile);
+/* Startup/ordinary wake only. Does not clear latched runtime faults.
+ * Reverses PrepareSleep and invalidates status/configuration until reacquired. */
+void Charging_BeginValidation(void);
+void Charging_EndValidation(void);
+/* Completed state survives a warm pause. Automatic recharge rearming after
+ * warm/done inhibition needs separate agreed policy; this API adds none. */
+void Charging_SetChargeRequired(bool required);
+/* Sole foreground owner of MP2724 requests/Update; call every app cycle,
+ * including unavailable power and shutdown, until cancellation drains. */
+void Charging_Update(bool available);
+void Charging_OnInterrupt(void);
+void Charging_RequestPrepareSleep(void);
+/* Deliberate immediate shipping action, at most once per request lifecycle.
+ * Missing idle adapter leaves the request visibly pending without guessing
+ * a shipping delay. Accepted reports transport ACK; uncertain cannot be replayed. */
+bool Charging_RequestShipping(void);
+Charging_Observation Charging_GetObservation(void);
 
 #endif /* USER_CHARGING_H */

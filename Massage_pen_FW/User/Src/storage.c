@@ -1,4 +1,4 @@
 #include "storage.h"
-
-/* Skeleton: persist requested vibration/heat levels in USER_SETTINGS flash
- * and load them on startup. Implementation will be defined later. */
+Storage_Settings Storage_Load(void) {
+ return (Storage_Settings){.heat_level=STORAGE_DUMMY_LEVEL,.vibration_level=STORAGE_DUMMY_LEVEL};
+}

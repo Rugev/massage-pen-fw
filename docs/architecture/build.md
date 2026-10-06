@@ -10,3 +10,5 @@ GNU Arm Embedded tools on PATH, and writes outputs to `Massage_pen_FW/build/Debu
   define build configuration; read those files rather than duplicating settings.
 
 Only Debug builds are used. Generated CMake is read-only.
+
+Host runtime checks are available through [`tests/runtime/run.sh`](../../tests/runtime/run.sh).

@@ -6,6 +6,9 @@
 #define STORAGE_USER_SETTINGS_BASE_ADDRESS      0x0800F800UL
 #define STORAGE_USER_SETTINGS_SIZE_BYTES        2048U
 
-/* Skeleton: storage format, public API and save/load behavior remain undecided. */
+#include <stdint.h>
+#define STORAGE_DUMMY_LEVEL 1U
+typedef struct { uint8_t heat_level, vibration_level; } Storage_Settings;
+Storage_Settings Storage_Load(void);
 
 #endif /* USER_STORAGE_H */

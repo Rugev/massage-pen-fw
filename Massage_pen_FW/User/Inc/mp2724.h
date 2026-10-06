@@ -6,7 +6,7 @@
  * suppress COMMAND_MASK bits during unrelated read-modify-write operations.
  * Defaults are factory option 0000; OTP variants can have different defaults.
  * Configuration fields below are R/W; STATUS fields and reserved bits are R/O.
- * No HAL transport, startup configuration or charging policy is implemented.
+ * Startup configuration and charging policy remain application-owned.
  */
 #ifndef USER_MP2724_H
 #define USER_MP2724_H
@@ -961,5 +961,49 @@ typedef struct {
 } mp2724_register_info_t;
 
 extern const mp2724_register_info_t mp2724_registers[MP2724_REGISTER_COUNT];
+
+#include "i2c_device.h"
+/* Initialize once before starting; Update is foreground, callbacks are ISR.
+ * Requests reject unavailable/busy/unacknowledged results and invalid masks.
+ * Config preserves reserved bits and compares only requested fields. Caller
+ * validates field encodings. Ordinary config rejects registers containing
+ * autonomously updated fields regardless of the targeted mask. Qualified
+ * CHG_CTRL3 config also rejects (REJECTED) when BATTFET_DIS is observed set;
+ * reconnect/shipping always needs an explicit command.
+ * Exhaustion latches until reboot/init.
+ * Commands are separate: ACCEPTED means write ACK and an observation, never
+ * proof of side-effect completion. UNCERTAIN requires caller reconciliation;
+ * automatic retries cannot replay a possibly transmitted command write.
+ * GetResult is retained; Acknowledge permits the next request only after all
+ * callback/buffer ownership has ended. recovering reports retained ownership;
+ * exhaustion can become terminal before recovery drains. Keep calling Update.
+ * Cancel polls/drains through Update.
+ */
+void MP2724_Init(I2C_HandleTypeDef *handle, const I2C_DeviceOps *ops);
+bool MP2724_RequestRead(uint8_t reg);
+bool MP2724_RequestConfig(uint8_t reg, uint8_t mask, uint8_t value);
+/* Caller asserts an idle ownership lease for the ENTIRE addressed register,
+ * from prerequisite read through verification (including retries), or through
+ * cancellation/abort drain. Hold hardware autonomous activity stopped until
+ * result is terminal AND recovering=false; do not infer release from a terminal
+ * command/health result alone. Every write of these registers needs the lease:
+ * IIN: source detection must be quiescent/prevented from completing or
+ * restarting, including new source/CC events. Checking VIN_RDY once does not
+ * reserve this ownership. Keep detection blocked for the entire transaction.
+ * CHG_CTRL3: battery discharge/OCP must be quiescent/prevented from asserting
+ * BATTFET_DIS throughout the lease, including preread/write/readback/retries
+ * and cancellation drain. A clear preread alone cannot reserve that ownership.
+ * The Idle path retains the active-BATTFET guard; it cannot reconnect/ship.
+ * Unqualified ordinary RequestConfig rejects these registers without transfer.
+ * This API asserts caller ownership; it does not stop hardware autonomously. */
+bool MP2724_RequestConfigIdle(uint8_t reg, uint8_t mask, uint8_t value);
+bool MP2724_RequestCommand(uint8_t reg, uint8_t mask, uint8_t value);
+void MP2724_Update(void);
+I2C_DeviceResult MP2724_GetResult(void);
+bool MP2724_Acknowledge(void);
+void MP2724_Cancel(void);
+void MP2724_OnReadComplete(I2C_HandleTypeDef *handle);
+void MP2724_OnWriteComplete(I2C_HandleTypeDef *handle);
+void MP2724_OnError(I2C_HandleTypeDef *handle);
 
 #endif /* USER_MP2724_H */

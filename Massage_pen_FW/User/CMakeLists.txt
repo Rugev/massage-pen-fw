@@ -6,7 +6,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Register application sources explicitly.
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Src/app.c
+    Src/runtime.c
+    Src/firmware_hw.c
     Src/charging.c
+    Src/i2c_device.c
     Src/mp2724.c
     Src/vibration.c
     Src/drv2624.c

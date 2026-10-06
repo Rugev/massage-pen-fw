@@ -1,14 +1,23 @@
 # Runtime architecture: agreed requirements
 
-Runtime implementation remains pending. This records the agreed design;
-unresolved items below remain open. Values belong in user headers, not this document.
+Runtime startup and peripheral adapters connect through [runtime.c](../../../Massage_pen_FW/User/Src/runtime.c) and [firmware_hw.c](../../../Massage_pen_FW/User/Src/firmware_hw.c). Runtime implements polling sleep while retaining RAM; true MCU low-power entry remains deferred. This records the agreed design; unresolved items below remain open. Values belong in user headers, not this document.
 
 ## Ownership and execution
 
 - [app.c](../../../Massage_pen_FW/User/Src/app.c) owns operating policy,
   transitions, fault latching, session timers, requested levels and module coordination.
-  Define the single current application state in [app.h](../../../Massage_pen_FW/User/Inc/app.h).
-- `main.c` remains a minimal entry point and passes HAL handles explicitly.
+  The current application state is declared in [app.h](../../../Massage_pen_FW/User/Inc/app.h).
+- [main.c](../../../Massage_pen_FW/Core/Src/main.c) remains a minimal entry point,
+  initializes generated peripherals and passes HAL handles to [runtime](../../../Massage_pen_FW/User/Src/runtime.c).
+- [runtime.c](../../../Massage_pen_FW/User/Src/runtime.c) dispatches app work once
+  per distinct HAL tick; it does not catch up missed ticks and records skipped
+  slots. Sensor cadence follows [sensors.c](../../../Massage_pen_FW/User/Src/sensors.c).
+- [firmware_hw.c](../../../Massage_pen_FW/User/Src/firmware_hw.c) adapts board
+  peripherals. [i2c_device.c](../../../Massage_pen_FW/User/Src/i2c_device.c)
+  provides the common asynchronous transfer engine used by each dedicated I2C
+  driver/instance. Transfers are stopped and drained before buffers are reused.
+- Startup currently passes NULL optional profiles; readiness-dependent policy
+  gates remain active until required validated configurations are supplied.
 - Run foreground app work at 1 kHz using SysTick timing. ADC and I2C transfers
   use interrupts; callbacks capture results/events for foreground processing.
 - Modules own mechanisms and internal sequencing. App gets status and supplies
@@ -17,7 +26,10 @@ unresolved items below remain open. Values belong in user headers, not this docu
 
 | Module | Responsibility |
 | --- | --- |
-| `power` | SYS_ON, SYS_PG sequencing/monitoring, RAM-retaining sleep |
+| `runtime` | Foreground dispatch and polling sleep |
+| `firmware_hw` | Board peripheral adapters and callback routing |
+| `i2c_device` | Common asynchronous transfer engine for dedicated I2C instances |
+| `power` | SYS_ON GPIO sequencing, SYS_PG monitoring and wake polling |
 | `sensors` | ADC acquisition, battery/tip conversion and validity |
 | `charging` / `mp2724` | Charger management / device transport and register operations |
 | `vibration` / `drv2624` | Level control and calibration / device operations |
@@ -25,7 +37,7 @@ unresolved items below remain open. Values belong in user headers, not this docu
 | `buttons` | Debouncing and press/release events; app interprets gestures |
 | `leds` | Requested display patterns |
 | `storage` | Settings load; dummy heat/vibration level 1 for now |
-| `watchdog` | MCU watchdog mechanism; selection remains open |
+| `watchdog` | Stub; MCU watchdog selection remains open |
 
 Sources and matching headers are in [User/Src](../../../Massage_pen_FW/User/Src)
 and [User/Inc](../../../Massage_pen_FW/User/Inc).
@@ -118,12 +130,9 @@ Initial electrical validity limits are provisional for bench validation:
 tip ADC input within 20 mV of either rail faults; battery above 4500 mV faults.
 Do not assign a lower battery sensor-fault cutoff; valid low voltage follows
 shutdown policy. Normalize the configured oversampled ADC results before
-conversion. Values will be defined in [sensors.h](../../../Massage_pen_FW/User/Inc/sensors.h).
+conversion. Values are defined in [sensors.h](../../../Massage_pen_FW/User/Inc/sensors.h).
 
-The current generated ADC configuration lacks circular DMA and a two-channel
-sequence. Implementing the requested buffer requires ADC sequencing, circular
-DMA setup and DMA interrupt routing. These protected configuration changes must
-be made through the user's CubeMX workflow; generated files are not hand-edited.
+The hardware adapter validates the generated two-channel ADC sequence and configures circular DMA and callback routing in [firmware_hw.c](../../../Massage_pen_FW/User/Src/firmware_hw.c). The protected generated configuration remains subject to regeneration review; generated files are not hand-edited.
 
 ## User interface
 
@@ -177,7 +186,8 @@ vibration request without calibration, calibrate with up to three attempts total
 failure faults. Keep successful results in RAM, restore/verify after driver power
 loss, and reuse across RAM sleep. Reboot requires calibration again. Flash
 persistence is deferred. When heat and vibration are requested together, heat
-waits for calibration success or verified restoration; heat-only does not require it.
+waits for calibration success or verified restoration. Heat-only skips
+calibration but still requires validated vibration configuration.
 See [DRV2624 requirements](../../architecture/drv2624.md).
 
 ## Failures and fault lifecycle
@@ -198,8 +208,9 @@ See [DRV2624 requirements](../../architecture/drv2624.md).
   display the fault for 60 s, then enter RAM-retaining fault sleep.
 - Fault wake keeps SYS_ON off, skips measurements/ordinary wake validation,
   displays the retained fault for 10 s and sleeps again.
-- Ignore the usual 1 s shutdown gesture in fault states. A 10 s button hold
-  provides the hardware power reset through the charger.
+- Ignore the usual 1 s shutdown gesture in fault states. A 10 s button hold is
+  intended to trigger the charger hardware power reset; firmware does not
+  guarantee that reset and the wiring requires hardware verification.
 
 Latch the first detected fault. For faults detected in the same app cycle,
 use the code order below as priority. Subsequent faults do not replace the code.
@@ -224,14 +235,15 @@ Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
 ## Open items for planning
 
 - Battery-only STATUS3 freshness remains unresolved; do not assume live NTC data.
-- Detailed charging implementation, remaining charger settings and charging LED
-  policy are separate work; preserve [existing charging requirements](../../architecture/charging.md).
+- Remaining charger profile/settings, charge-LED behavior and recharge policy
+  remain unresolved; preserve [existing charging requirements](../../architecture/charging.md).
 - Validate provisional electrical validity limits and tune heater gains on hardware.
-- Agree the validated motor configuration/calibration timing and MCU watchdog.
+- Agree the validated motor configuration/calibration timing, production idle lease and MCU watchdog. No default charger or motor profile or idle lease is supplied; charging and vibration readiness remain gated until approved profiles and lease are provided.
 - Select a RAM-retaining low-power mode and verify wake/reset wiring and generated
   configuration. Report any required protected-file changes; do not hand-edit them.
-- User-setting saving and persistent calibration remain deferred. Public APIs
-  and storage format are not yet defined.
+- User-setting saving and persistent calibration remain deferred. The
+  persistence format and save interface remain undefined; settings loading is
+  provided by [storage.c](../../../Massage_pen_FW/User/Src/storage.c).
 
 Implementation verification should exercise state transitions and failure counts
 with simulated peripherals, build Debug with the prescribed build script, and

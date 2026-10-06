@@ -55,10 +55,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Power accepts enable/disable and exposes starting/ready/failure; app owns the consequences. GPIO/time adapters allow host simulation. Low-power entry is connected in Task 9 after mode selection.
 
-- [ ] Write `test_power.c`: disabled by default; wait for PG; PG at 999 ms succeeds; no PG at 1000 ms fails; loss after good fails; intentional disable does not fault; elapsed-time checks work across tick rollover.
-- [ ] Run `./tests/runtime/run.sh power`; confirm the missing behaviour fails.
-- [ ] Implement power sequencing with nonblocking timing and generated pins/polarities. Keep physical low-power entry separated from policy; do not use HAL_Delay.
-- [ ] Run the selector and Debug build; commit the task files after both pass.
+- [x] Write `test_power.c`: disabled by default; wait for PG; PG at 999 ms succeeds; no PG at 1000 ms fails; loss after good fails; intentional disable does not fault; elapsed-time checks work across tick rollover.
+- [x] Run `./tests/runtime/run.sh power`; confirm the missing behaviour fails.
+- [x] Implement power sequencing with nonblocking timing and generated pins/polarities. Keep physical low-power entry separated from policy; do not use HAL_Delay.
+- [x] Run the selector and Debug build; commit the task files after both pass.
 
 ### Task 2: ADC frames, conversion, filtering and failure tracking
 
@@ -66,10 +66,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Sensors receives ADC handle and power availability; publishes matched battery/tip values, unfiltered validity/protection data, filtered control data and acquisition failures. App schedules acquisition; DMA callbacks publish completed frames.
 
-- [ ] Write cases for half/full frame alternation; one pair per tick; no mixed epochs or duplicate consumption; next-tick missing completion counts once; ninth failure survives and tenth faults; success resets only that channel. Inject late callbacks after stop/restart and assert no old data is accepted.
-- [ ] Add conversion/filter cases: oversampling normalization, matched-battery thermistor normalization, integer interpolation, first-value filter initialization, coefficient 1/16 convergence in both directions, provisional rail/high-voltage invalidity, and valid undervoltage distinguished from sensor fault. Assert unfiltered protection data bypasses filter lag.
-- [ ] Run `./tests/runtime/run.sh sensors` and confirm the cases fail; implement acquisition/frame ownership and conversion/filtering. Start only after power good plus agreed settling time. Suspend acquisition and invalidate readiness when sensing power is removed.
-- [ ] Run the selector and Debug build; commit. Until DMA generation is available, test the frame mechanism through callbacks/fakes and keep hardware acquisition explicitly gated rather than silently substituting another cadence.
+- [x] Write cases for half/full frame alternation; one pair per tick; no mixed epochs or duplicate consumption; next-tick missing completion counts once; ninth failure survives and tenth faults; success resets only that channel. Inject late callbacks after stop/restart and assert no old data is accepted.
+- [x] Add conversion/filter cases: oversampling normalization, matched-battery thermistor normalization, integer interpolation, first-value filter initialization, coefficient 1/16 convergence in both directions, provisional rail/high-voltage invalidity, and valid undervoltage distinguished from sensor fault. Assert unfiltered protection data bypasses filter lag.
+- [x] Run `./tests/runtime/run.sh sensors` and confirm the cases fail; implement acquisition/frame ownership and conversion/filtering. Start only after power good plus agreed settling time. Suspend acquisition and invalidate readiness when sensing power is removed.
+- [x] Run the selector and Debug build; commit. Until DMA generation is available, test the frame mechanism through callbacks/fakes and keep hardware acquisition explicitly gated rather than silently substituting another cadence.
 
 ### Task 3: Interrupt-driven device operations and verified writes
 
@@ -77,10 +77,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Each driver receives its I2C handle, progresses one pending operation, retains completion/status and reports exhausted retries. Higher modules request status reads or configuration writes with field-aware verification.
 
-- [ ] Write cases for 5 ms transfer timeout and retry delay; failed write/readback/mismatch counts as one configuration failure; only matching readback succeeds; three consecutive attempts fault; standalone reads follow the same limit; unrelated successes do not reset a pending operation's counter.
-- [ ] Add tests for reserved-bit preservation, suppression of unrelated action bits, command-aware verification, automatically changing fields, stale callbacks after abort/restart, and a single retained DRV STATUS snapshot despite read-to-clear semantics. Do not blindly reissue commands whose side effects differ from configuration writes.
-- [ ] Run `./tests/runtime/run.sh i2c` to confirm failure; implement nonblocking transport, timeout/abort ownership and register-aware transactions. Do not read DRV STATUS independently from multiple consumers.
-- [ ] Run the selector and Debug build; commit. If a shared transport helper becomes necessary, explicitly register its source in User CMake; keep charger/vibration policy out of it.
+- [x] Write cases for 5 ms transfer timeout and retry delay; failed write/readback/mismatch counts as one configuration failure; only matching readback succeeds; three consecutive attempts fault; standalone reads follow the same limit; unrelated successes do not reset a pending operation's counter.
+- [x] Add tests for reserved-bit preservation, suppression of unrelated action bits, command-aware verification, automatically changing fields, stale callbacks after abort/restart, and a single retained DRV STATUS snapshot despite read-to-clear semantics. Do not blindly reissue commands whose side effects differ from configuration writes.
+- [x] Run `./tests/runtime/run.sh i2c` to confirm failure; implement nonblocking transport, timeout/abort ownership and register-aware transactions. Do not read DRV STATUS independently from multiple consumers.
+- [x] Run the selector and Debug build; commit. If a shared transport helper becomes necessary, explicitly register its source in User CMake; keep charger/vibration policy out of it.
 
 ### Task 4: Buttons, displays and dummy settings
 
@@ -88,9 +88,9 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Buttons publish debounced press/release information; app interprets duration by state. LEDs accept a display request and advance patterns. Storage loads dummy levels without writing flash.
 
-- [ ] Write cases for 20 ms stable transitions, bounce, durations spanning rollover, level-count LEDs, 2 s breathing restricted to active heater LEDs, three 1 s red flashes, 0.2 s fault flashing and the agreed six-bit order. Dummy loads must yield 1/1 on each cold/ordinary wake load request.
-- [ ] Run `./tests/runtime/run.sh ui`; confirm failure. Implement mechanisms and header macros without embedding app transitions in buttons/LEDs. Keep persistent saving and calibration storage deferred.
-- [ ] Run the selector and Debug build; commit. Software LED modulation must preserve the app loop's execution budget; inspect smoothness later on hardware.
+- [x] Write cases for 20 ms stable transitions, bounce, durations spanning rollover, level-count LEDs, 2 s breathing restricted to active heater LEDs, three 1 s red flashes, 0.2 s fault flashing and the agreed six-bit order. Dummy loads must yield 1/1 on each cold/ordinary wake load request.
+- [x] Run `./tests/runtime/run.sh ui`; confirm failure. Implement mechanisms and header macros without embedding app transitions in buttons/LEDs. Keep persistent saving and calibration storage deferred.
+- [x] Run the selector and Debug build; commit. Software LED modulation must preserve the app loop's execution budget; inspect smoothness later on hardware.
 
 ### Task 5: Heater power control and protections
 
@@ -98,10 +98,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Heater accepts requested level, valid measurement snapshot, enable/readiness and average-current ceiling; owns PWM/phase and reports faults. PID accepts error/cadence and actual output bounds. App owns battery-temperature policy and LEDs.
 
-- [ ] Write cases for voltage-compensated power/duty, 1 A/2 A average-current limits, saturation and integral recovery, negative-error extra feedback, and provisional gains/cadence from the spec. Verify wide intermediates across the accepted sensor range.
-- [ ] Add phase cases: enable/target change chooses preheat/precool only outside the band; boundary equality selects PID; phase completion goes to PID; later disturbances stay in PID; level zero disables. At 49 degrees inhibit until strictly below target; at 49.5 degrees report fault immediately on fresh unfiltered data. ADC acquisition retries retain last valid control data.
-- [ ] Run `./tests/runtime/run.sh heater`; confirm failure. Implement fixed-point control with conditional integration and power/current clamps, keeping PWM zero until app authorizes operation. Reset/adjust integral on phase/inhibit transitions to avoid windup; final thermal behaviour is verified in Task 9.
-- [ ] Run the selector and Debug build; commit. Keep provisional tuning identifiable in headers; do not claim stable hardware control from host tests.
+- [x] Write cases for voltage-compensated power/duty, 1 A/2 A average-current limits, saturation and integral recovery, negative-error extra feedback, and provisional gains/cadence from the spec. Verify wide intermediates across the accepted sensor range.
+- [x] Add phase cases: enable/target change chooses preheat/precool only outside the band; boundary equality selects PID; phase completion goes to PID; later disturbances stay in PID; level zero disables. At 49 degrees inhibit until strictly below target; at 49.5 degrees report fault immediately on fresh unfiltered data. ADC acquisition retries retain last valid control data.
+- [x] Run `./tests/runtime/run.sh heater`; confirm failure. Implement fixed-point control with conditional integration and power/current clamps, keeping PWM zero until app authorizes operation. Reset/adjust integral on phase/inhibit transitions to avoid windup; final thermal behaviour is verified in Task 9.
+- [x] Run the selector and Debug build; commit. Keep provisional tuning identifiable in headers; do not claim stable hardware control from host tests.
 
 ### Task 6: Vibration readiness and RAM calibration
 
@@ -109,10 +109,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Vibration consumes DRV operations, requested level and power availability; reports configuration/calibration readiness, retained results and failures. App gates heating when both outputs are requested.
 
-- [ ] Write cases for error check before configuration, verified configuration, no calibration for level zero, first nonzero request calibrating, three failed calibrations faulting, and success retaining all three calibration results in RAM.
-- [ ] Add cases for power loss restoring/verifying retained results, RAM sleep preserving them, reboot requiring calibration again, constant RTP level changes, and cancellation during calibration never publishing a false success. Clear-to-read status must remain observable to app.
-- [ ] Run `./tests/runtime/run.sh vibration`; confirm failure. Implement the nonblocking sequence with Task 3 operations and validated-profile input. Do not apply default/example motor settings as a board profile. Physical calibration waits for the motor configuration prerequisite.
-- [ ] Run the selector and Debug build; commit. Flash writes remain absent.
+- [x] Write cases for error check before configuration, verified configuration, no calibration for level zero, first nonzero request calibrating, three failed calibrations faulting, and success retaining all three calibration results in RAM.
+- [x] Add cases for power loss restoring/verifying retained results, RAM sleep preserving them, reboot requiring calibration again, constant RTP level changes, and cancellation during calibration never publishing a false success. Clear-to-read status must remain observable to app.
+- [x] Run `./tests/runtime/run.sh vibration`; confirm failure. Implement the nonblocking sequence with Task 3 operations and validated-profile input. Do not apply default/example motor settings as a board profile. Physical calibration waits for the motor configuration prerequisite.
+- [x] Run the selector and Debug build; commit. Flash writes remain absent.
 
 ### Task 7: Charger integration contract
 
@@ -120,10 +120,10 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** Charging consumes MP2724 operations and an agreed board configuration; reports input validity, active charge phase, NTC status/freshness, errors and verified readiness. App owns low-voltage deadlines and shipping decisions; charging executes requests and maintains USB-dependent watchdog service.
 
-- [ ] Write cases distinguishing input-valid, input-ready and active charge phase; configuration write/readback verification; startup/wake watchdog recovery versus runtime expiry; 100 ms polling plus interrupt-triggered refresh; shipping request and unrelated-command suppression.
-- [ ] Add cases that watchdog service continues with valid USB during temperature pauses/charge completion, is disabled on battery-only/pre-sleep paths, and charger status acquisition cannot hide errors. Preserve existing warm-pause/charge-completion requirements; unavailable battery-only NTC status must not be labelled fresh.
-- [ ] Run `./tests/runtime/run.sh charging`; confirm failure. Implement the agreed monitor/command contract with Task 3, retaining existing charging limits. Leave configuration readiness false if required board settings are unresolved; host tests supply an explicit fake agreed profile.
-- [ ] Run the selector and Debug build; commit. Complete the separate charging design/configuration work before enabling charging control on hardware; this task does not invent the remaining setpoints or charging display policy.
+- [x] Write cases distinguishing input-valid, input-ready and active charge phase; configuration write/readback verification; startup/wake watchdog recovery versus runtime expiry; 100 ms polling plus interrupt-triggered refresh; shipping request and unrelated-command suppression.
+- [x] Add cases that watchdog service continues with valid USB during temperature pauses/charge completion, is disabled on battery-only/pre-sleep paths, and charger status acquisition cannot hide errors. Preserve existing warm-pause/charge-completion requirements; unavailable battery-only NTC status must not be labelled fresh.
+- [x] Run `./tests/runtime/run.sh charging`; confirm failure. Implement the agreed monitor/command contract with Task 3, retaining existing charging limits. Leave configuration readiness false if required board settings are unresolved; host tests supply an explicit fake agreed profile.
+- [x] Run the selector and Debug build; commit. Complete the separate charging design/configuration work before enabling charging control on hardware; this task does not invent the remaining setpoints or charging display policy.
 
 ### Task 8: App state machine and policy
 
@@ -131,26 +131,26 @@ For each task: add the listed failing cases first, run the selector to confirm f
 
 **Interfaces:** App consumes module observations and commands modules, owns the exact state enum from the spec, and preserves RAM state across ordinary/fault sleep. Main supplies handles and foreground execution in Task 9.
 
-- [ ] Write startup/wake cases: PG sequencing; cold-only inference at fault threshold minus 2 degrees; low-battery precedence; dummy settings reload on ordinary wake; no automatic activation; short wake press finishes validation; qualified waking press enables after readiness; the same press cannot disable.
-- [ ] Add normal-mode cases: input insertion/removal preserves session; click boundaries cycle levels; 1 s fresh press disables; zero-level inactivity and entire-session deadlines; cold/hot faults latch; current derating changes live; heat waits for requested vibration calibration/restoration, while heat-only does not calibrate.
-- [ ] Add battery cases: equality rules; input grants 10 s start/restart deadline; reported charge phase cancels it; expiry selects notice/shipping; crossing low threshold ends normal operation even while charging and requires a fresh enable after recovery. Notice preserves charging/SYS_ON for Charging, disables SYS_ON for Sleep; USB loss during notice/recovery restores shutdown policy. Evaluate all timers across rollover.
-- [ ] Add fault cases: assigned code/priority, first fault retained, SYS_ON disabled, 60 s initial display, retained fault sleep, 10 s display on either wake source with no sensing, ignored 1 s gesture, and reboot clearing RAM latch. Do not emulate the external 10 s hardware reset in software.
-- [ ] Run `./tests/runtime/run.sh app`; confirm failure. Implement the single-state transition logic using module mechanisms; prevent late enable requests from reviving a disabled/faulted session. Transition destinations must be reevaluated when input or faults change.
-- [ ] Run the selector, all host tests and Debug build; commit. Record uncovered hardware prerequisites rather than treating fake readiness as production readiness.
+- [x] Write startup/wake cases: PG sequencing; cold-only inference at fault threshold minus 2 degrees; low-battery precedence; dummy settings reload on ordinary wake; no automatic activation; short wake press finishes validation; qualified waking press enables after readiness; the same press cannot disable.
+- [x] Add normal-mode cases: input insertion/removal preserves session; click boundaries cycle levels; 1 s fresh press disables; zero-level inactivity and entire-session deadlines; cold/hot faults latch; current derating changes live; heat waits for requested vibration calibration/restoration, while heat-only does not calibrate.
+- [x] Add battery cases: equality rules; input grants 10 s start/restart deadline; reported charge phase cancels it; expiry selects notice/shipping; crossing low threshold ends normal operation even while charging and requires a fresh enable after recovery. Notice preserves charging/SYS_ON for Charging, disables SYS_ON for Sleep; USB loss during notice/recovery restores shutdown policy. Evaluate all timers across rollover.
+- [x] Add fault cases: assigned code/priority, first fault retained, SYS_ON disabled, 60 s initial display, retained fault sleep, 10 s display on either wake source with no sensing, ignored 1 s gesture, and reboot clearing RAM latch. Do not emulate the external 10 s hardware reset in software.
+- [x] Run `./tests/runtime/run.sh app`; confirm failure. Implement the single-state transition logic using module mechanisms; prevent late enable requests from reviving a disabled/faulted session. Transition destinations must be reevaluated when input or faults change.
+- [x] Run the selector, all host tests and Debug build; commit. Record uncovered hardware prerequisites rather than treating fake readiness as production readiness.
 
 ### Task 9: Main integration, low power and hardware acceptance
 
-**Files:** Modify only matching USER CODE blocks in `Massage_pen_FW/Core/Src/main.c`; complete `User/{Src/power.c,Inc/power.h}` and callback wiring in the owning user sources. Implement `User/{Inc/watchdog.h,Src/watchdog.c}` only after watchdog selection. Add new production sources explicitly to `User/CMakeLists.txt` if required.
+**Files:** Main integration in matching USER CODE blocks; runtime dispatch and hardware adapters in `Massage_pen_FW/User/Src/runtime.c` and `firmware_hw.c`; explicit source registration in `User/CMakeLists.txt`.
 
-**Interfaces:** Main initializes HAL peripherals, passes handles to app and dispatches foreground work on SysTick timing. User callbacks route events to the owning modules. Power enters the selected RAM-retaining sleep and restores required clocks/peripherals before ordinary wake validation; fault wake follows its separate path.
+**Interfaces:** Startup passes HAL handles to runtime dispatch. GPIO polling provides the agreed temporary RAM-retaining sleep; true MCU low-power entry and MCU watchdog selection remain deferred.
 
-- [ ] Verify the prerequisite regenerated configuration and board decisions; compare generated changes against the user's regeneration. Do not edit protected files to work around missing DMA/wake settings.
-- [ ] Add integration host cases for callback routing, no operation before initialization, and missed/overlapping ADC acquisitions counted without duplicate triggers. Do not catch up missed loop ticks by issuing back-to-back ADC frames and calling them 1 ms samples.
-- [ ] Connect startup/dispatcher and callbacks, keep all app logic in User code, and connect the agreed sleep/watchdog mechanism. Before sleeping, quiesce transfers/output mechanisms and manage charger watchdog according to policy.
-- [ ] Run `./tests/runtime/run.sh`, `./Massage_pen_FW/build.sh` and `git diff --check`. Verify main.c changes are confined to matching user blocks with unchanged line endings; no build artifacts or protected edits are staged.
+- [x] Audit regenerated configuration and board decisions. The generated ADC sequence and hardware bindings are validated; no protected-file edits were needed.
+- [x] Add integration host cases for callback routing, initialization gates, wake handling, and missed/overlapping ADC acquisitions without duplicate triggers.
+- [x] Connect startup dispatch and callbacks. The temporary sleep path polls GPIO while retaining RAM; production MCU low-power entry and MCU watchdog remain deferred.
+- [x] Run `./tests/runtime/run.sh`, `./Massage_pen_FW/build.sh` and whitespace/USER-block/line-ending checks. See the Task 9 report for results.
 - [ ] On hardware, measure 1 ms acquisition completion and app execution budget, half/full callback order, channel pairing, failure timeouts and PWM/LED behaviour. Verify battery shutdown and USB transitions, PG loss, short/long waking presses, RAM retention and both wake sources, fault wake without SYS_ON, and the external 10 s reset with relevant power sources.
-- [ ] Validate sensor electrical limits and motor calibration; tune heater gains with actual temperature/power traces at each target, current ceiling and battery range. Verify inhibit/fault thresholds and overshoot behaviour. Do not mark hardware acceptance complete until battery-temperature monitoring and charger configuration are resolved.
-- [ ] Commit integration after available checks pass; report exactly which host/build/hardware checks ran and which prerequisites remain unmet.
+- [ ] Validate sensor electrical limits and motor calibration; tune heater gains with actual temperature/power traces at each target, current ceiling and battery range. Verify inhibit/fault thresholds and overshoot behaviour. Battery-temperature monitoring, reviewed charger configuration, approved motor configuration and production idle lease remain prerequisites; no charger/motor profiles or lease were supplied, so operation stays gated.
+- [x] Commit the software integration after available checks pass; report exactly which host/build/hardware checks ran and which prerequisites remain unmet. Hardware acceptance remains incomplete.
 
 ## Execution handoff
 

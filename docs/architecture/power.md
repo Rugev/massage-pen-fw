@@ -1,19 +1,39 @@
 # System power and safety
 
-Use `SYS_ON_Pin` to control power to vibration, heater and analog inputs;
-read `SYS_PG_Pin` for system power status.
-Standby waits in low power for `BUTTON_PWR_ON_Pin` or `CHRG_INT_Pin` wake.
-Charging and Normal operation enable `SYS_ON`.
+[power.c](../../Massage_pen_FW/User/Src/power.c) drives `SYS_ON` and monitors
+`SYS_PG`; polarities, timeout and battery cutoffs are in
+[power.h](../../Massage_pen_FW/User/Inc/power.h). `SYS_ON` powers vibration,
+heater and analog sensing. Startup and ordinary wake wait for power good before
+sensing/output operation. Power-good acquisition timeout or subsequent loss
+becomes a latched app fault; intentional power-off does not.
 
-Definitions are in [main.h](../../Massage_pen_FW/Core/Inc/main.h); configuration is in the
-read-only [.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) and generated code.
-One or two safety watchdogs are intended; selection is undecided.
-Power sequencing, low-power implementation and safety design will be decided later.
+Sleep currently retains RAM and polls power-button assertion and active-low
+charger-interrupt edges. No MCU low-power entry, clock restoration or MCU
+watchdog is implemented; [watchdog.c](../../Massage_pen_FW/User/Src/watchdog.c)
+remains a skeleton. Low-power mode, watchdog selection and physical acceptance
+remain open.
 
-`SYS_ON` low disables the vibration motor, battery sensing resistors, heater
-and temperature feedback. Operate only while `SYS_PG` is high; keep checking
-it during operation. Enter Standby at `BATTERY_STANDBY_MV`; at the lower
-`BATTERY_DISCONNECT_MV`, request complete battery disconnection through the charger.
-Both thresholds are in `Massage_pen_FW/User/Inc/power.h`, along with MCU supply and polarities.
-Voltage monitoring in Standby remains to be designed because `SYS_ON` disables
-the battery sensing resistors.
+[runtime.c](../../Massage_pen_FW/User/Src/runtime.c) polls raw wake edges during
+both active operation and sleep. Edges arriving while shutdown drains are queued
+for the sleep handoff. A continuing shutdown hold supplies no new edge and cannot
+enable again. A fresh power wake starts ordinary button debounce; a charger wake
+retains button identity. Fault wake retains `SYS_ON` off and skips ordinary
+validation. Sleep entry requires quiescent ADC/transports, verified charger
+watchdog sleep preparation and inactive outputs, as checked by
+[App_GetSnapshot](../../Massage_pen_FW/User/Src/app.c).
+
+Charger bus availability is independent of `SYS_ON`: runtime keeps charger
+foreground work enabled while system outputs are powered down. The charger
+watchdog is separate from the unimplemented MCU watchdog; its management and
+sleep preparation are in [charging.c](../../Massage_pen_FW/User/Src/charging.c).
+
+[App battery policy](application.md) applies the standby and disconnect
+thresholds, including equality. Low battery inhibits outputs; valid input permits
+bounded charging recovery. A charging destination retains `SYS_ON`; a sleep
+destination disables it before the notice. Shipping requests remain subject to
+the charger idle-register lease. Battery sensing is unavailable with `SYS_ON`
+off; standby voltage monitoring remains open.
+
+Pins and ports come from [main.h](../../Massage_pen_FW/Core/Inc/main.h);
+peripheral configuration remains in the read-only
+[.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) and generated code.

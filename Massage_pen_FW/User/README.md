@@ -2,9 +2,13 @@
 
 Headers go in `Inc/`; C sources go in `Src/`. Add sources explicitly to
 [User CMake](CMakeLists.txt); the include directory is already registered.
-Files are skeletons with no APIs or behavior yet. Future startup integration
-belongs in existing USER CODE blocks in `Massage_pen_FW/Core/Src/main.c`, with explicit HAL
-handle passing. Keep values as `#define` macros in the relevant headers.
+Startup in `main.c` passes HAL handles to [runtime](Inc/runtime.h);
+[firmware_hw](Inc/firmware_hw.h) supplies the board adapters.
+Optional reviewed profiles are passed at startup; NULL keeps policy gates active.
+Keep values as `#define` macros in the relevant headers.
+
+[Storage](Src/storage.c) currently returns dummy levels; flash persistence is not
+implemented. [Watchdog](Src/watchdog.c) is a stub; MCU timer selection remains open.
 
 Read [agent rules](../../AGENTS.md) and the [context index](../../architecture.md).
 Build from the repository root with `./Massage_pen_FW/build.sh` (Debug only).
