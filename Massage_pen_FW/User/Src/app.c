@@ -203,7 +203,7 @@ static bool low_battery(const Sensors_Snapshot *s)
 }
 static void update_charge_deadline(uint32_t now, bool low, const Charging_Observation *c)
 {
-    if (!low || !c->input_valid || c->active_charging) charge_timer_running = false;
+    if (!low || !c->input_valid || (c->active_charging && c->admitted)) charge_timer_running = false;
     else if (!charge_timer_running || !charge_input_before) {
         charge_timer_running = true;
         charge_started_ms = now;
@@ -348,6 +348,16 @@ static void display_policy(uint32_t now)
     Leds_Request(&display, now);
     Leds_Update(now);
 }
+static void publish_charge_policy(const Sensors_Snapshot *s)
+{
+    bool powered = Power_GetState() == POWER_STATE_READY && !fault_state();
+    bool demand = !fault_state() && app.state != APP_SLEEP && app.state != APP_BATTERY_DISCONNECT;
+    app.battery_sequence = s->battery_sequence;
+    app.charging_eligible = powered && s->battery_fresh && s->battery_current_valid &&
+        s->battery_mv >= BATTERY_CHARGE_ADMISSION_MIN_MV && demand;
+    Charging_SetChargeRequired(demand);
+    Charging_SetEligibility(app.charging_eligible, s->battery_sequence, normal_operation(), fault_state());
+}
 void App_Update(uint32_t now, bool charger_available)
 {
     Power_Update();
@@ -358,7 +368,6 @@ void App_Update(uint32_t now, bool charger_available)
     bool sensing_power = power == POWER_STATE_READY && !fault_state();
     Sensors_Update(sensing_power);
     Sensors_Snapshot sensors = Sensors_GetSnapshot();
-    Charging_Update(charger_available);
     Charging_Observation charging = Charging_GetObservation();
     Vibration_Update(sensing_power, previous_normal, app.vibration_level);
     Vibration_Observation vibration = Vibration_GetObservation();
@@ -376,6 +385,17 @@ void App_Update(uint32_t now, bool charger_available)
         operating_policy(now, user_shutdown || session_expired(now), &sensors, &charging, &vibration);
     }
 
+    publish_charge_policy(&sensors);
+    Charging_Update(charger_available);
+    charging = Charging_GetObservation();
+    if (!fault_state() && (app.state != APP_SLEEP || !App_GetSnapshot().sleep_ready))
+        latch_fault(detected_fault(Power_GetState(), &sensors, &charging, &vibration), now);
+    if (!fault_state() && app.state != APP_BATTERY_DISCONNECT && app.state != APP_SLEEP) {
+        update_charge_deadline(now, low_battery(&sensors), &charging);
+        operating_policy(now, false, &sensors, &charging, &vibration);
+    }
+    publish_charge_policy(&sensors);
+
     bool output_power = Power_GetState() == POWER_STATE_READY && !fault_state();
     bool enabled = normal_operation() && output_power;
     bool heat_authorized = enabled && vibration.configuration_ready &&
@@ -387,13 +407,6 @@ void App_Update(uint32_t now, bool charger_available)
     if (previous_normal != enabled || sensing_power != output_power)
         Vibration_Update(output_power, enabled, app.vibration_level);
     if (sensing_power && !output_power) Sensors_Update(false);
-    app.battery_sequence = sensors.battery_sequence;
-    app.charging_eligible = output_power && sensors.battery_fresh &&
-        sensors.battery_current_valid &&
-        sensors.battery_mv >= BATTERY_CHARGE_ADMISSION_MIN_MV &&
-        !fault_state() && app.state != APP_SLEEP && app.state != APP_BATTERY_DISCONNECT;
-    Charging_SetChargeRequired(app.charging_eligible && !fault_state() && app.state != APP_SLEEP &&
-                               app.state != APP_BATTERY_DISCONNECT);
     if (vibration.status.valid) (void)DRV2624_AcknowledgeStatus(vibration.status.sequence);
     display_policy(now);
 }

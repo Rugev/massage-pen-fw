@@ -13,6 +13,9 @@ bool app_sensing_power, app_vibration_power, app_vibration_enabled, app_heat_aut
 uint8_t app_vibration_level, app_heat_level;
 uint32_t app_heat_current;
 App_Bindings app_received_bindings;
+bool app_charge_demand, app_charge_eligible, app_charge_normal, app_charge_fault;
+bool app_charge_update_eligible, app_charge_update_normal, app_charge_update_fault;
+uint32_t app_charge_battery_sequence;
 bool app_sensor_quiescent, app_sensor_stop_ready;
 I2C_DeviceResult app_drv_result;
 void FakeApp_Reset(void) {
@@ -24,6 +27,9 @@ void FakeApp_Reset(void) {
     app_loads = app_validations = app_validation_ends = app_prepare_sleep = 0U;
     app_shipping = app_sensor_updates = app_charge_updates = app_vibration_updates = 0U;
     app_status_acks = 0U;
+    app_charge_demand=app_charge_eligible=app_charge_normal=app_charge_fault=false;
+    app_charge_update_eligible=app_charge_update_normal=app_charge_update_fault=false;
+    app_charge_battery_sequence=0U;
     app_heat_authorized = app_sensing_power = app_vibration_power = app_vibration_enabled = false;
     app_vibration_level = app_heat_level = 0U;
     app_heat_current = 0U;
@@ -57,8 +63,11 @@ bool DRV2624_AcknowledgeStatus(uint32_t sequence) {
 void Charging_Init(const Charging_Profile *profile) {app_received_bindings.charging=profile;}
 void Charging_BeginValidation(void) {app_validations++;}
 void Charging_EndValidation(void) {app_validation_ends++;}
-void Charging_SetChargeRequired(bool required) {(void)required;}
-void Charging_Update(bool available) {(void)available; app_charge_updates++;}
+void Charging_SetChargeRequired(bool required) {app_charge_demand=required;}
+void Charging_SetEligibility(bool eligible,uint32_t sequence,bool normal,bool fault)
+{app_charge_eligible=eligible;app_charge_battery_sequence=sequence;app_charge_normal=normal;app_charge_fault=fault;}
+void Charging_Update(bool available) {(void)available; app_charge_updates++;
+ app_charge_update_eligible=app_charge_eligible;app_charge_update_normal=app_charge_normal;app_charge_update_fault=app_charge_fault;}
 void Charging_RequestPrepareSleep(void) {app_prepare_sleep++;}
 bool Charging_RequestShipping(void) {app_shipping++; return true;}
 Charging_Observation Charging_GetObservation(void) {return app_charge;}

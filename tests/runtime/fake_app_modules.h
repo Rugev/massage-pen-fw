@@ -16,6 +16,9 @@ extern bool app_sensing_power, app_vibration_power, app_vibration_enabled, app_h
 extern uint8_t app_vibration_level, app_heat_level;
 extern uint32_t app_heat_current;
 extern App_Bindings app_received_bindings;
+extern bool app_charge_demand, app_charge_eligible, app_charge_normal, app_charge_fault;
+extern bool app_charge_update_eligible, app_charge_update_normal, app_charge_update_fault;
+extern uint32_t app_charge_battery_sequence;
 extern bool app_sensor_quiescent, app_sensor_stop_ready;
 extern I2C_DeviceResult app_drv_result;
 void FakeApp_Reset(void);

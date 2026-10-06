@@ -189,7 +189,7 @@ static void test_cold_only_inference_and_low_precedence(void) {
     app_charge.input_valid=false; tick(21U); CHECK(state()==APP_SLEEP);
     App_Wake(21U, APP_WAKE_CHARGER, false, 0U); app_power=POWER_STATE_READY; tick(41U);
     CHECK(App_GetSnapshot().heat_level==1U); CHECK(App_GetSnapshot().vibration_level==1U);
-    reset(0U); ready(); app_charge.input_valid=true; app_charge.active_charging=true;
+    reset(0U); ready(); app_charge.input_valid=true; app_charge.active_charging=true; app_charge.admitted=true;
     app_sensors.battery_mv=BATTERY_STANDBY_MV;
     app_sensors.tip_mdegc=HEATER_FAULT_TEMP_MDEGC-APP_COLD_INFERENCE_MARGIN_MDEGC;
     tick(20U); CHECK(state()==APP_CHARGING); CHECK(App_GetSnapshot().heat_level==1U);
@@ -239,7 +239,7 @@ static void test_heat_calibration_and_live_current(void) {
     CHECK(state()==APP_NORMAL); CHECK(app_heat_authorized); CHECK(app_vibration_level==0U);
 }
 static void test_low_battery_notice_input_loss_and_no_resume(void) {
-    normal(0U); app_charge.input_valid=true; app_charge.active_charging=true;
+    normal(0U); app_charge.input_valid=true; app_charge.active_charging=true; app_charge.admitted=true;
     app_sensors.battery_mv=BATTERY_STANDBY_MV; tick(400U);
     CHECK(state()==APP_LOW_BATTERY_NOTICE); CHECK(app_power==POWER_STATE_READY);
     CHECK(!app_heat_authorized); CHECK(!app_vibration_enabled); CHECK(app_prepare_sleep==0U);
@@ -247,7 +247,7 @@ static void test_low_battery_notice_input_loss_and_no_resume(void) {
     CHECK(app_power==POWER_STATE_DISABLED); CHECK(state()==APP_LOW_BATTERY_NOTICE);
     CHECK(app_prepare_sleep==0U); /* Continue polling through notice. */
     tick(3400U); CHECK(state()==APP_SLEEP);
-    reset(0U); ready(); app_charge.input_valid=true; app_charge.active_charging=true;
+    reset(0U); ready(); app_charge.input_valid=true; app_charge.active_charging=true; app_charge.admitted=true;
     app_sensors.battery_mv=BATTERY_STANDBY_MV; raw_power(true); tick(0U); tick(20U); tick(320U);
     CHECK(state()==APP_CHARGING); app_sensors.battery_mv=BATTERY_STANDBY_MV+1U;
     tick(1000U); CHECK(state()==APP_CHARGING); /* Rejected held press cannot revive. */
@@ -260,7 +260,7 @@ static void test_recovery_deadlines_and_shipping_equality(void) {
     app_charge.input_valid=true; tick(base); tick(base+20U); CHECK(state()==APP_CHARGING_RECOVERY);
     CHECK(app_power==POWER_STATE_READY); CHECK(app_shipping==0U);
     tick(base+9999U); CHECK(state()==APP_CHARGING_RECOVERY);
-    app_charge.active_charging=true; tick(base+10000U); CHECK(state()==APP_CHARGING);
+    app_charge.active_charging=true; app_charge.admitted=true; tick(base+10000U); CHECK(state()==APP_CHARGING);
     tick(base+20000U); CHECK(app_shipping==0U);
     app_charge.active_charging=false; tick(base+20001U); CHECK(state()==APP_CHARGING_RECOVERY);
     tick(base+30000U); CHECK(app_shipping==0U);
@@ -494,7 +494,11 @@ static void test_low_battery_shutdown_precedes_pending_configuration(void) {
 static void test_pending_configuration_active_phase_cancels_deadline(void) {
     for (unsigned wake=0U; wake<2U; ++wake) {
         uint32_t base=pending_validation(wake!=0U,BATTERY_STANDBY_MV,true);
-        tick(base); app_charge.active_charging=true;
+        tick(base); app_charge.active_charging=true; app_charge.admitted=false;
+        tick(base+APP_CHARGING_START_LIMIT_MS);
+        CHECK(state()==APP_LOW_BATTERY_NOTICE);
+        base=pending_validation(wake!=0U,BATTERY_STANDBY_MV,true);
+        tick(base); app_charge.active_charging=true; app_charge.admitted=true;
         tick(base+APP_CHARGING_START_LIMIT_MS);
         CHECK(state()==(wake ? APP_WAKEUP : APP_STARTUP)); CHECK(app_shipping==0U);
         tick(base+20000U); CHECK(app_power==POWER_STATE_READY);
@@ -554,7 +558,21 @@ static void test_raw_battery_admission_and_undervoltage(void) {
     tick(1U); CHECK(App_GetSnapshot().fault_code==2U);
 }
 
+static void test_charger_receives_policy_before_progress(void) {
+    reset(0U);tick(0U);CHECK(!app_charge_update_eligible);
+    reset(0U);ready();app_settings=(Storage_Settings){0U,0U};raw_power(true);
+    tick(0U);tick(20U);tick(320U);CHECK(state()==APP_NORMAL);
+    CHECK(app_charge_update_eligible && app_charge_update_normal);
+    CHECK(app_charge_normal && app_charge_demand && !app_charge_fault);
+    app_charge.input_valid=true;tick(341U);CHECK(state()==APP_CHARGING_NORMAL);
+    CHECK(app_charge_update_normal && app_charge_normal);
+    app_sensors.battery_mv=2499U;app_sensors.battery_sequence++;
+    tick(342U);CHECK(state()==APP_FAULT_DISPLAY);
+    CHECK(!app_charge_update_eligible && app_charge_update_fault);
+    CHECK(!app_charge_demand && app_charge_fault);
+}
 int main(void) {
+    test_charger_receives_policy_before_progress();
     test_raw_battery_admission_and_undervoltage();
     test_raw_power_wake_rearms_cached_hold_and_debounces();
     test_charger_wake_keeps_continuing_shutdown_hold_consumed();

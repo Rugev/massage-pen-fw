@@ -93,7 +93,7 @@ typedef struct {
 } Charging_Profile;
 typedef struct {
     bool profile_valid, configuration_ready, status_ready;
-    bool safe_baseline_ready;
+    bool safe_baseline_ready, admitted;
     bool input_valid, input_ready, active_charging, topoff_active;
     uint8_t phase, ntc1, status[6];
     bool ntc_fresh, cold, hot, cool, warm, paused, completed;
@@ -112,6 +112,8 @@ void Charging_EndValidation(void);
 /* Completed state survives a warm pause. Automatic recharge rearming after
  * warm/done inhibition needs separate agreed policy; this API adds none. */
 void Charging_SetChargeRequired(bool required);
+void Charging_SetEligibility(bool battery_eligible, uint32_t battery_sequence,
+                             bool normal_operation, bool fault_inhibited);
 /* Sole foreground owner of MP2724 requests/Update; call every app cycle,
  * including unavailable power and shutdown, until cancellation drains. */
 void Charging_Update(bool available);
