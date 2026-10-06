@@ -138,7 +138,7 @@ static void shipping_commands_and_drain(void)
 /* Status failures invalidate freshness, while observed hot/cold/error stay latched. */
 static void stale_ntc_and_retained_faults(void)
 {
- reset(NULL);regs[0x14]=0x20;run(40);assert(Charging_GetObservation().hot&&Charging_GetObservation().ntc_fresh);
+ reset(NULL);regs[0x14]=0x20;run(60);assert(Charging_GetObservation().hot&&Charging_GetObservation().ntc_fresh);
  available=false;run(5);assert(!Charging_GetObservation().ntc_fresh&&Charging_GetObservation().hot);
  available=true;fail_reads=true;run(100);assert(Charging_GetObservation().communication_fault&&Charging_GetObservation().hot&&!Charging_GetObservation().ntc_fresh);
  reset(NULL);regs[0x12]=0;regs[0x14]=0x10;run(40);assert(!Charging_GetObservation().ntc_fresh&&!Charging_GetObservation().cool);
@@ -417,8 +417,194 @@ static void exhausted_drain_revokes_admission_immediately(void)
   assert(!Charging_GetObservation().admitted && !Charging_GetObservation().safe_baseline_ready);
  }
 }
+static void stale_input_completion_cannot_restore_fault_readiness(void)
+{
+ for(unsigned write=0U;write<2U;write++) {
+  Charging_Profile p=profile();reset(&p);Charging_SetChargeRequired(false);ready();run(40);
+  if(write)regs[1]=31U;
+  Charging_OnInterrupt();
+  for(unsigned i=0U;i<200U;i++) {
+   Charging_Update(available);
+   if(pending && reg==1U && leased && writing==(write!=0U))break;
+   if(pending)complete();
+   FakeHAL_AdvanceTick(1U);
+  }
+  assert(pending && reg==1U && leased);complete();
+  Charging_SetEligibility(true,2U,false,true);run(30U);
+  assert(!Charging_GetObservation().configuration_ready);
+ }
+}
+static void exhausted_transport_cannot_finish_sleep(void)
+{
+ Charging_Profile p=profile();reset(&p);ready();run(40U);
+ Charging_RequestPrepareSleep();fail_reads=true;run(200U);
+ assert(Charging_GetObservation().communication_fault);
+ assert(!Charging_GetObservation().sleep_ready);
+ fail_reads=false;Charging_BeginValidation();run(200U);
+ assert(Charging_GetObservation().communication_fault && !Charging_GetObservation().safe_baseline_ready);
+ Charging_RequestPrepareSleep();run(100U);assert(!Charging_GetObservation().sleep_ready);
+}
+static void begin_precharge_arm(const Charging_Profile *p)
+{
+ reset(p);ready();run(40U);
+ regs[0x13]=MP2724_CHG_STAT_PRECHARGE<<MP2724_CHG_STAT_SHIFT;
+ Charging_OnInterrupt();run(40U);Charging_SetEligibility(true,2U,false,false);
+}
+/* Stop at each physical arming write, on both sides of transmission. */
+static void revocation_at_each_arming_write(void)
+{
+ const uint8_t stage_regs[]={9U,0U,3U,0U,9U};
+ for(unsigned stage=0U;stage<5U;stage++)for(unsigned after=0U;after<2U;after++)
+ for(unsigned mode=0U;mode<7U;mode++) {
+  Charging_Profile p=profile();begin_precharge_arm(&p);
+  unsigned seen=0U;
+  for(unsigned i=0U;i<150U;i++) {
+   Charging_Update(available);
+   if(pending && writing) {
+    if(seen==stage)break;
+    seen++;
+   }
+   if(pending)complete();
+   FakeHAL_AdvanceTick(1U);
+  }
+  assert(pending && writing && reg==stage_regs[stage]);
+  if(after)complete();
+  if(mode==0U)Charging_SetEligibility(false,3U,false,false);
+  if(mode==1U)Charging_SetEligibility(true,3U,true,false);
+  if(mode==2U)Charging_SetEligibility(true,3U,false,true);
+  if(mode==3U)Charging_RequestPrepareSleep();
+  if(mode==4U)Charging_BeginValidation();
+  if(mode==5U){regs[0x12]=0U;Charging_OnInterrupt();}
+  if(mode==6U){regs[0x14]=8U;Charging_OnInterrupt();}
+  if(mode<5U) {
+   Charging_Observation o=Charging_GetObservation();
+   assert(!o.admitted && o.inhibit_requested && o.precharge_target_ma==0U);
+   if(!after) {
+    drain_ready=false;run(3U);
+    assert(!Charging_GetObservation().sleep_ready && pending);
+    drain_ready=true;
+   }
+  }
+  run(180U);
+  Charging_Observation o=Charging_GetObservation();
+  assert(o.precharge_current_known && o.precharge_current_ma==0U);
+  assert(o.parameter_lock_known && o.parameter_locked);
+  if(mode!=1U && mode!=4U)assert(o.inhibit_known && o.inhibited && !o.admitted);
+  if(mode==3U)assert(o.sleep_ready && o.safe_baseline_ready && !(regs[7]&MP2724_WATCHDOG_MASK));
+  if(mode==2U)assert(!o.configuration_ready);
+  if(mode==4U)assert(o.configuration_ready);
+  /* Requalifying the same battery generation cannot reuse the old epoch. */
+  if(mode!=2U && mode!=3U) {
+   Charging_SetEligibility(false,3U,false,false);run(40U);
+   regs[0x12]=0x60U;regs[0x14]=0U;
+   Charging_SetEligibility(true,3U,false,false);Charging_OnInterrupt();run(180U);
+   assert(Charging_GetObservation().precharge_target_ma==0U);
+   Charging_SetEligibility(true,4U,false,false);run(80U);
+   assert(Charging_GetObservation().precharge_current_ma==CHARGER_PRECHARGE_OPERATING_CURRENT_MA);
+  }
+ }
+}
+static void unknown_observations_after_exhaustion(void)
+{
+ Charging_Profile p=profile();begin_precharge_arm(&p);
+ for(unsigned i=0U;i<100U;i++) {
+  Charging_Update(available);
+  if(pending && writing && reg==3U)break;
+  if(pending)complete();
+  FakeHAL_AdvanceTick(1U);
+ }
+ drain_ready=false;run(35U);
+ Charging_Observation o=Charging_GetObservation();
+ assert(o.inhibit_requested && o.precharge_target_ma==0U);
+ assert(!o.inhibit_known && !o.inhibited && !o.precharge_current_known && !o.parameter_lock_known);
+ Charging_RequestPrepareSleep();drain_ready=true;run(100U);
+ o=Charging_GetObservation();assert(o.communication_fault && !o.sleep_ready && !o.inhibit_known);
+}
+static void failed_parameter_transactions_latch(void)
+{
+ const uint8_t stage_regs[]={9U,3U,9U,0U,3U,0U,9U};
+ const uint8_t stage_masks[]={MP2724_EN_CHG_MASK,MP2724_IPRE_MASK,MP2724_EN_CHG_MASK,
+  MP2724_LOCK_CHG_MASK,MP2724_IPRE_MASK,MP2724_LOCK_CHG_MASK,MP2724_EN_CHG_MASK};
+ for(unsigned stage=0U;stage<7U;stage++)for(unsigned failure=0U;failure<3U;failure++) {
+  Charging_Profile p=profile();
+  if(stage<2U){reset(&p);regs[3]=0xf3U;}
+  else begin_precharge_arm(&p);
+  unsigned target=stage<2U?stage:stage-2U,seen=0U;
+  for(unsigned i=0U;i<150U;i++) {
+   Charging_Update(available);
+   if(pending && writing) {
+    if(seen==target)break;
+    seen++;
+   }
+   if(pending)complete();
+   FakeHAL_AdvanceTick(1U);
+  }
+  assert(pending && writing && reg==stage_regs[stage]);
+  bool wrote=false;unsigned failures=0U;
+  /* The request stays owned across successful prereads and failed retries. */
+  for(unsigned i=0U;i<100U;i++) {
+   if(pending) {
+    assert(reg==stage_regs[stage]);
+    if(failure==0U && writing) {failures++;MP2724_OnError(&handle);}
+    else if(failure!=0U && !writing && wrote) {
+     failures++;wrote=false;
+     if(failure==1U)MP2724_OnError(&handle);
+     else {*buffer=regs[reg]^stage_masks[stage];pending=false;MP2724_OnReadComplete(&handle);}
+    } else {wrote=writing;complete();}
+   }
+   FakeHAL_AdvanceTick(1U);Charging_Update(available);
+   if(Charging_GetObservation().communication_fault)break;
+  }
+  assert(failures==I2C_DEVICE_FAILURE_LIMIT);
+  Charging_Observation o=Charging_GetObservation();
+  assert(o.communication_fault && !o.admitted && o.inhibit_requested && o.precharge_target_ma==0U);
+  assert(!o.inhibit_known && !o.precharge_current_known && !o.parameter_lock_known);
+  unsigned before=trace_count;
+  Charging_BeginValidation();Charging_SetEligibility(true,9U,false,false);run(100U);
+  Charging_RequestPrepareSleep();run(100U);
+  assert(trace_count==before && !Charging_GetObservation().sleep_ready);
+ }
+}
+static void watchdog_rollover_and_restart_active_device(void)
+{
+ Charging_Profile p=profile();reset(&p);FakeHAL_AdvanceTick(UINT32_MAX-200U);
+ regs[3]=p.registers[3];regs[9]|=MP2724_EN_CHG_MASK;
+ regs[0x13]=MP2724_CHG_STAT_PRECHARGE<<MP2724_CHG_STAT_SHIFT;
+ Charging_SetEligibility(false,1U,false,false);ready();run(150U);
+ assert(Charging_GetObservation().inhibited && Charging_GetObservation().precharge_current_ma==0U);
+ unsigned before=watchdog_resets;run(CHARGER_WATCHDOG_SERVICE_INTERVAL_MS+100U);
+ assert(watchdog_resets>before && !Charging_GetObservation().watchdog_fault);
+ Charging_SetEligibility(true,2U,false,false);run(180U);
+ assert(Charging_GetObservation().precharge_current_ma==0U);
+ Charging_SetEligibility(true,3U,false,false);run(80U);
+ assert(Charging_GetObservation().precharge_current_ma==CHARGER_PRECHARGE_OPERATING_CURRENT_MA);
+ unsigned fault_reads=status_reads[2];regs[0x13]|=MP2724_CHG_FAULT_MASK;
+ for(unsigned i=0U;i<80U;i++){Charging_OnInterrupt();step();}
+ assert(status_reads[2]>fault_reads && Charging_GetObservation().charger_fault);
+ assert(Charging_GetObservation().inhibited && Charging_GetObservation().precharge_current_ma==0U);
+}
+static void fault_reconciles_unadmitted_device(void)
+{
+ for(unsigned application=0U;application<2U;application++) {
+  Charging_Profile p=profile();reset(&p);Charging_SetChargeRequired(false);ready();run(40U);
+  regs[9]|=MP2724_EN_CHG_MASK;regs[3]=p.registers[3];regs[0]&=~MP2724_LOCK_CHG_MASK;
+  if(application)Charging_SetEligibility(false,2U,false,true);
+  else {regs[0x13]|=MP2724_CHG_FAULT_MASK;Charging_OnInterrupt();}
+  run(100U);
+  Charging_Observation o=Charging_GetObservation();
+  assert(o.inhibit_known && o.inhibited && o.precharge_current_known && o.precharge_current_ma==0U);
+  assert(o.parameter_lock_known && o.parameter_locked && !o.configuration_ready);
+ }
+}
 int main(void)
 {
+ fault_reconciles_unadmitted_device();
+ failed_parameter_transactions_latch();
+ watchdog_rollover_and_restart_active_device();
+ revocation_at_each_arming_write();
+ unknown_observations_after_exhaustion();
+ stale_input_completion_cannot_restore_fault_readiness();
+ exhausted_transport_cannot_finish_sleep();
  exhausted_drain_revokes_admission_immediately();
  completed_precharge_return_does_not_rearm();
  nonprecharge_and_ineligible_never_raise_current();

@@ -94,6 +94,11 @@ typedef struct {
 typedef struct {
     bool profile_valid, configuration_ready, status_ready;
     bool safe_baseline_ready, admitted;
+    /* Physical observations are meaningful only when the corresponding known flag is true. */
+    bool inhibit_known, inhibited, precharge_current_known, parameter_lock_known, parameter_locked;
+    uint16_t precharge_current_ma;
+    bool inhibit_requested;
+    uint16_t precharge_target_ma;
     bool input_valid, input_ready, active_charging, topoff_active;
     uint8_t phase, ntc1, status[6];
     bool ntc_fresh, cold, hot, cool, warm, paused, completed;
