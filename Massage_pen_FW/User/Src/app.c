@@ -125,6 +125,8 @@ static uint8_t detected_fault(Power_State_t power, const Sensors_Snapshot *s,
         (s->fresh && s->tip_valid && s->tip_mdegc >= HEATER_FAULT_TEMP_MDEGC)) return 1U;
     if (s->invalid_tip) return 2U;
     if (s->invalid_battery) return 3U;
+    if (s->battery_fresh && s->battery_current_valid &&
+        s->battery_mv < BATTERY_CHARGE_ADMISSION_MIN_MV) return APP_FAULT_BATTERY_UNDERVOLTAGE;
     if (power == POWER_STATE_FAILURE) return power_was_ready ? 5U : 4U;
     if (c->hot) return 6U;
     if (c->cold) return 7U;
@@ -385,7 +387,12 @@ void App_Update(uint32_t now, bool charger_available)
     if (previous_normal != enabled || sensing_power != output_power)
         Vibration_Update(output_power, enabled, app.vibration_level);
     if (sensing_power && !output_power) Sensors_Update(false);
-    Charging_SetChargeRequired(!fault_state() && app.state != APP_SLEEP &&
+    app.battery_sequence = sensors.battery_sequence;
+    app.charging_eligible = output_power && sensors.battery_fresh &&
+        sensors.battery_current_valid &&
+        sensors.battery_mv >= BATTERY_CHARGE_ADMISSION_MIN_MV &&
+        !fault_state() && app.state != APP_SLEEP && app.state != APP_BATTERY_DISCONNECT;
+    Charging_SetChargeRequired(app.charging_eligible && !fault_state() && app.state != APP_SLEEP &&
                                app.state != APP_BATTERY_DISCONNECT);
     if (vibration.status.valid) (void)DRV2624_AcknowledgeStatus(vibration.status.sequence);
     display_policy(now);

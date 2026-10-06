@@ -4,6 +4,7 @@
 
 #define BATTERY_CELL_COUNT                      1U
 #define BATTERY_CAPACITY_MAH                    3000U
+#define BATTERY_CHARGE_ADMISSION_MIN_MV         2500U
 #define BATTERY_MIN_MV                          2750U
 #define BATTERY_NOMINAL_MV                      3600U
 #define BATTERY_MAX_MV                          4200U

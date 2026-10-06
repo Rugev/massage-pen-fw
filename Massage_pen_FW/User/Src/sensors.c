@@ -111,6 +111,7 @@ static void consume_frame(uint16_t battery_sum, uint16_t tip_sum, uint8_t channe
 
     if (battery_acquired)
     {
+        ++snapshot.battery_sequence;
         snapshot.battery_failures = 0U;
         snapshot.battery_mv = battery_mv;
         snapshot.battery_valid = battery_mv <= SENSORS_BATTERY_MAX_MV;
@@ -187,7 +188,9 @@ void Sensors_Update(bool power_available)
     if (!power_available || !adapter_available)
     {
         if (adapter_available) { (void)stop_acquisition(); }
+        uint32_t sequence = snapshot.battery_sequence;
         memset(&snapshot, 0, sizeof(snapshot));
+        snapshot.battery_sequence = sequence;
         power_present = false;
         tick_seen = false;
         battery_initialized = tip_initialized = false;
@@ -205,6 +208,7 @@ void Sensors_Update(bool power_available)
                 tick_seen = true;
                 last_tick = now;
                 snapshot.fresh = false;
+                snapshot.battery_fresh = snapshot.battery_current_valid = false;
                 miss_slots(slots);
             }
             return;
@@ -226,6 +230,7 @@ void Sensors_Update(bool power_available)
     tick_seen = true;
     last_tick = now;
     snapshot.fresh = false;
+    snapshot.battery_fresh = snapshot.battery_current_valid = false;
 
     uint32_t mask = __get_PRIMASK();
     __disable_irq();
@@ -240,6 +245,9 @@ void Sensors_Update(bool power_available)
     if (was_pending)
     {
         consume_frame(battery, tip, was_completed ? channels : 0U);
+        snapshot.battery_fresh = was_completed &&
+            (channels & SENSORS_CHANNEL_BATTERY) != 0U && missed == 0U;
+        snapshot.battery_current_valid = snapshot.battery_fresh && snapshot.battery_valid;
         snapshot.fresh = was_completed && channels == SENSORS_CHANNEL_ALL && missed == 0U;
         if (!was_completed && !stop_acquisition()) { miss_slots(missed); return; }
     }

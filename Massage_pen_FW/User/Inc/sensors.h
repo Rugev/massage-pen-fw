@@ -52,6 +52,9 @@ typedef struct Sensors_AcquisitionOps {
 } Sensors_AcquisitionOps;
 
 typedef struct {
+    bool battery_fresh; /* Timely battery completion this tick, independent of tip. */
+    bool battery_current_valid; /* Fresh battery passes electrical validity. */
+    uint32_t battery_sequence; /* Accepted battery acquisitions; retained across power loss. */
     bool available; /* Complete adapter and sensing power available. */
     bool ready;     /* Initial valid pair obtained; retries retain last values. */
     bool fresh;     /* Matched completed pair this tick, including invalidity. */

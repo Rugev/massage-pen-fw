@@ -5,6 +5,8 @@
 #include "vibration.h"
 #include "heater.h"
 
+#define APP_FAULT_BATTERY_UNDERVOLTAGE     14U
+
 #define APP_ENABLE_HOLD_MS                300U
 #define APP_DISABLE_HOLD_MS               1000U
 #define APP_CLICK_MIN_MS                  100U
@@ -39,6 +41,8 @@ typedef struct {
     App_State state;
     uint8_t heat_level, vibration_level, fault_code;
     uint32_t session_started_ms;
+    bool charging_eligible; /* Current raw battery passes admission; faults inhibit. */
+    uint32_t battery_sequence;
     bool sleep_requested, shutdown_pending, sleep_ready;
 } App_Snapshot;
 

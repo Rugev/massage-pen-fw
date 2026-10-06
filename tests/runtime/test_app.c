@@ -18,7 +18,7 @@ static void reset(uint32_t now) {
 static void ready(void) {
     app_power = POWER_STATE_READY;
     app_sensors = (Sensors_Snapshot){.available=true, .ready=true, .fresh=true,
-        .battery_valid=true, .tip_valid=true, .battery_mv=3600U,
+        .battery_fresh=true, .battery_current_valid=true, .battery_sequence=1U, .battery_valid=true, .tip_valid=true, .battery_mv=3600U,
         .filtered_battery_mv=3600U, .tip_mdegc=25000, .filtered_tip_mdegc=25000};
     app_charge.profile_valid = app_charge.configuration_ready = app_charge.status_ready = true;
     app_vibration.profile_valid = app_vibration.configuration_ready = true;
@@ -515,7 +515,47 @@ static void test_pending_configuration_low_press_cannot_revive_on_recovery(void)
     raw_power(true); tick(base+700U); tick(base+720U); tick(base+1020U);
     CHECK(state()==APP_CHARGING_NORMAL);
 }
+static void test_raw_battery_admission_and_undervoltage(void) {
+    for (unsigned operation=0U; operation<2U; ++operation) {
+        for (unsigned usb=0U; usb<2U; ++usb) {
+            for (uint32_t mv=2499U; mv<=2501U; ++mv) {
+                if (operation) normal(0U); else { reset(0U); ready(); }
+                app_charge.input_valid=usb!=0U;
+                app_sensors.battery_mv=mv; app_sensors.filtered_battery_mv=4000U;
+                app_sensors.fresh=false; /* Battery completion does not require tip. */
+                tick(400U);
+                CHECK(App_GetSnapshot().fault_code==(mv<2500U ? APP_FAULT_BATTERY_UNDERVOLTAGE : 0U));
+                if (mv<2500U) {
+                    CHECK(!App_GetSnapshot().charging_eligible);
+                    CHECK(app_shipping==0U && !app_heat_authorized && !app_vibration_enabled);
+                    app_sensors.battery_mv=4000U; app_charge.input_valid=!usb; tick(401U);
+                    CHECK(App_GetSnapshot().fault_code==APP_FAULT_BATTERY_UNDERVOLTAGE);
+                    tick(400U+APP_FAULT_INITIAL_DISPLAY_MS); CHECK(state()==APP_FAULT_SLEEP);
+                    App_Wake(61000U,APP_WAKE_CHARGER,false,0U); tick(61000U);
+                    CHECK(App_GetSnapshot().fault_code==APP_FAULT_BATTERY_UNDERVOLTAGE);
+                    reset(0U); ready(); app_sensors.battery_mv=2499U; tick(1U);
+                    CHECK(App_GetSnapshot().fault_code==APP_FAULT_BATTERY_UNDERVOLTAGE);
+                } else if (usb) CHECK(App_GetSnapshot().charging_eligible);
+            }
+        }
+    }
+    normal(0U); app_charge.input_valid=true;
+    app_sensors.battery_fresh=false; app_sensors.battery_current_valid=false;
+    tick(400U); CHECK(!App_GetSnapshot().charging_eligible && App_GetSnapshot().fault_code==0U);
+    app_sensors.acquisition_fault=true; tick(401U); CHECK(App_GetSnapshot().fault_code==12U);
+    reset(0U); ready(); app_sensors.battery_mv=2499U;
+    app_sensors.battery_current_valid=false; tick(1U);
+    CHECK(App_GetSnapshot().fault_code==0U && !App_GetSnapshot().charging_eligible);
+    app_sensors.battery_current_valid=false; app_sensors.invalid_battery=true;
+    tick(1U); CHECK(App_GetSnapshot().fault_code==3U);
+    reset(0U); ready(); app_sensors.battery_mv=2499U; app_power=POWER_STATE_FAILURE;
+    tick(1U); CHECK(App_GetSnapshot().fault_code==APP_FAULT_BATTERY_UNDERVOLTAGE);
+    reset(0U); ready(); app_sensors.battery_mv=2499U; app_sensors.invalid_tip=true;
+    tick(1U); CHECK(App_GetSnapshot().fault_code==2U);
+}
+
 int main(void) {
+    test_raw_battery_admission_and_undervoltage();
     test_raw_power_wake_rearms_cached_hold_and_debounces();
     test_charger_wake_keeps_continuing_shutdown_hold_consumed();
     test_verified_wake_after_sleeping_release_repress();
@@ -536,6 +576,6 @@ int main(void) {
     test_recovery_deadlines_and_shipping_equality(); test_recovery_recovers_without_activation();
     test_all_fault_codes_priority_and_first_latch(); test_fault_sleep_wake_no_sensing_and_reboot();
     test_status_ack_after_fault_consumption();
-    puts("app policy tests passed (29 groups, fault code pairs, wake episodes, rollover)");
+    puts("app policy tests passed (30 groups, fault code pairs, wake episodes, rollover)");
     return 0;
 }

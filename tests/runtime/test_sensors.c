@@ -317,8 +317,38 @@ static void test_foreground_gap_counts_slots_without_catchup(void)
     assert(pair(3276U, 1912U, SENSORS_CHANNEL_ALL).fresh);
 }
 
+static void test_independent_current_battery(void)
+{
+    start();
+    assert(!Sensors_GetSnapshot().battery_fresh);
+    Sensors_Snapshot s = pair(2047U, 1912U, SENSORS_CHANNEL_BATTERY);
+    assert(s.battery_fresh && s.battery_current_valid && !s.fresh && !s.ready);
+    assert(s.battery_mv == 2499U && s.battery_sequence == 1U);
+    s = pair(3276U, 1912U, SENSORS_CHANNEL_ALL);
+    assert(s.ready && s.battery_sequence == 2U);
+    s = pair(3276U, 1912U, SENSORS_CHANNEL_TIP);
+    assert(s.ready && !s.battery_fresh && !s.battery_current_valid);
+    assert(s.battery_sequence == 2U && s.battery_mv == 4000U);
+    FakeHAL_CompletePair(2047U*16U, 1912U*16U, SENSORS_CHANNEL_BATTERY);
+    FakeHAL_AdvanceTick(5U); Sensors_Update(true);
+    s = Sensors_GetSnapshot();
+    assert(!s.battery_fresh && !s.battery_current_valid && s.battery_sequence == 3U);
+    s = pair(3687U, 1912U, SENSORS_CHANNEL_BATTERY);
+    assert(s.battery_fresh && !s.battery_current_valid && s.invalid_battery);
+    Sensors_Update(false);
+    Sensors_OnDmaHalf(&fake_adc, SENSORS_CHANNEL_ALL);
+    s = Sensors_GetSnapshot();
+    assert(!s.battery_fresh && !s.battery_current_valid && s.battery_sequence == 4U);
+    Sensors_Update(true); FakeHAL_AdvanceTick(9U); Sensors_Update(true);
+    assert(!Sensors_GetSnapshot().battery_fresh);
+    FakeHAL_AdvanceTick(1U); Sensors_Update(true);
+    s = pair(3276U, 1912U, SENSORS_CHANNEL_BATTERY);
+    assert(s.battery_fresh && s.battery_current_valid && s.battery_sequence == 5U);
+}
+
 int main(void)
 {
+    test_independent_current_battery();
     test_foreground_gap_counts_slots_without_catchup();
     test_quiescence_observes_owned_dma_and_failed_stop();
     test_blocked_stop_exhausts_failures_once_per_tick();
