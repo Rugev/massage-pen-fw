@@ -26,12 +26,20 @@ pattern phase. Pattern constants and polarity are in
 [leds.h](../../Massage_pen_FW/User/Inc/leds.h); fault priority is defined by
 [app.c](../../Massage_pen_FW/User/Src/app.c).
 
-During admitted charging, the battery indicator breathes while charging and is
-solid green at completion. A non-error pause leaves it off; normal operation
-also shows solid green when charging is not paused. Charging-only mode shows
-charge progress, while Hybrid retains the normal-operation level display.
-Charging display behavior is implemented in
-[app.c](../../Massage_pen_FW/User/Src/app.c) and [leds.c](../../Massage_pen_FW/User/Src/leds.c).
+During normal operation or charging, fresh admitted active/top-off status with a
+fresh valid battery sample breathes the battery LED. A fresh retained DONE phase
+shows green even if admission was revoked by a warm pause. When normal operation
+is not paused, the battery LED is solid green even if charging is not active. Warm
+pause leaves it off; after cooling, retained completion returns it to green without
+enabling charging. Charging-only progress is filtered battery voltage mapped to
+the bands in [leds.h](../../Massage_pen_FW/User/Inc/leds.h). Normal-operation level
+display takes precedence, including when both requested levels are zero; heater
+preheat/precool breathe independently of the battery and progress patterns; level
+changes preserve the active pattern phases. Heat LEDs are off in charging-only
+mode. Low-battery notice and fault display have
+their own phases; LEDs are off in fault sleep. Display policy is in
+[app.c](../../Massage_pen_FW/User/Src/app.c) and rendering in
+[leds.c](../../Massage_pen_FW/User/Src/leds.c).
 Pins and ports for all buttons/LEDs come from
 [main.h](../../Massage_pen_FW/Core/Inc/main.h); consult the read-only
 [.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) for generated configuration.

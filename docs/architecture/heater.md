@@ -26,8 +26,10 @@ unavailable sensing, invalid readings, acquisition fault, missing PWM binding
 or withdrawn app authorization turns power off.
 
 [sensors.c](../../Massage_pen_FW/User/Src/sensors.c) consumes matched battery/tip
-DMA frames, normalizes oversampled ADC counts, checks electrical validity and
-filters valid measurements using integer fixed-point state. Tip conversion
+DMA frames and tracks raw battery freshness, current validity and sequence
+independently of the retained matched pair used for control. It normalizes
+oversampled ADC counts, checks electrical validity and filters valid measurements
+using integer fixed-point state. Tip conversion
 uses the battery voltage from the same acquisition to normalize the divider
 ratio, followed by integer linear interpolation in
 [thermistor_lut.h](../../Massage_pen_FW/User/Inc/thermistor_lut.h).

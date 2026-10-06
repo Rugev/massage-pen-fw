@@ -88,10 +88,13 @@ Heating and vibration require voltage above the standby threshold and a qualifyi
 enable press. At or below that threshold ends normal operation; voltage recovery
 alone does not resume it.
 
-Without input, apply the standby/disconnect shutdown policy. With input and low
-battery, allow 10 s for the charger to report an active charging phase. A reported
-active phase cancels the deadline. If charging later stops while battery remains
-low, start a new 10 s deadline; expiry applies the battery shutdown policy.
+Fresh raw battery eligibility gates charger admission independently of
+standby/disconnect shutdown policy; below the admission threshold latches
+undervoltage before shutdown policy. The app publishes eligibility and demand
+before charger sequencing and after same-cycle state transitions. With input and
+low battery, bounded recovery requires a fresh admitted active phase; a later
+inactive phase starts a new deadline. See [application policy](../../architecture/application.md)
+and [charging](../../architecture/charging.md).
 Keep SYS_ON enabled during charging recovery, with heat/vibration inhibited.
 
 When low voltage ends charging while normal operation, display the low-battery
@@ -129,8 +132,11 @@ when shutdown policy applies. Exactly the standby threshold does not permit enab
 Initial electrical validity limits are provisional for bench validation:
 tip ADC input within 20 mV of either rail faults; battery above 4500 mV faults.
 Do not assign a lower battery sensor-fault cutoff; valid low voltage follows
-shutdown policy. Normalize the configured oversampled ADC results before
-conversion. Values are defined in [sensors.h](../../../Massage_pen_FW/User/Inc/sensors.h).
+raw undervoltage fault or standby/disconnect shutdown policy, as applicable.
+Battery-channel freshness/current validity and sequence are tracked independently
+of the retained matched battery/tip pair used for conversion and control. Normalize
+the configured oversampled ADC results before conversion. Values are defined in
+[sensors.h](../../../Massage_pen_FW/User/Inc/sensors.h).
 
 The hardware adapter validates the generated two-channel ADC sequence and configures circular DMA and callback routing in [firmware_hw.c](../../../Massage_pen_FW/User/Src/firmware_hw.c). The protected generated configuration remains subject to regeneration review; generated files are not hand-edited.
 
@@ -151,7 +157,7 @@ The hardware adapter validates the generated two-channel ADC sequence and config
   PID operation uses solid level LEDs.
 
 Pins and existing level definitions remain in [UI references](../../architecture/ui.md)
-and user headers. Charging-only display details remain a separate charging topic.
+and user headers. Charging-only display behavior is also described there.
 
 ## Heater and vibration
 

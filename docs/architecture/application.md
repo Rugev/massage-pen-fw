@@ -9,10 +9,17 @@ state enum, timing constants and public API are in
 | --- | --- |
 | Startup / ordinary wake | Enable `SYS_ON`, await power good and measurements, validate charger status/configuration, then load settings and select operation, charging or sleep. Only cold boot applies inferred overtemperature checking; low battery takes precedence. |
 | Normal / charging while normal | Permit requested outputs through module interlocks. Input insertion/removal changes state without restarting the session. Shutdown or session expiry selects charging with input, otherwise sleep. |
-| Charging / charging recovery | Inhibit normal outputs. Low battery with valid input gets a bounded wait for active charging; an active phase cancels the deadline, and a later inactive phase starts another. |
+| Charging / charging recovery | Inhibit normal outputs. Low battery with valid input gets a bounded wait; a fresh admitted active phase cancels the deadline, and later inactivity starts another. |
 | Low-battery notice / battery disconnect | End normal operation at or below the standby threshold; voltage recovery does not restart it. Show the notice before charging or sleep, or request shipping immediately at or below the disconnect threshold when shutdown policy applies. |
 | Sleep | Disable `SYS_ON`; complete shutdown work before entering RAM-retaining polling sleep. |
 | Fault display / fault sleep | Disable `SYS_ON` and retain the first fault until reboot. Fault wake briefly redisplays the retained code without ordinary validation or sensing. |
+
+A fresh current-valid raw battery sample independently gates charging admission;
+undervoltage below that admission threshold latches its own fault before battery
+shutdown policy runs. This fault remains latched across USB changes and RAM sleep/wake
+until reboot. The app publishes charger demand and eligibility before
+charger sequencing and again after same-cycle state changes. See [charging](charging.md)
+and [app.c](../../Massage_pen_FW/User/Src/app.c).
 
 Enable requires a qualifying power press, power good, valid measurements, battery
 above the standby threshold, charger configuration/status readiness and a valid

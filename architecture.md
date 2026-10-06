@@ -2,7 +2,9 @@
 
 The STM32 CMake project is in `Massage_pen_FW/`. User code lives in `Massage_pen_FW/User/Inc` and
 `Massage_pen_FW/User/Src`; `main.c` remains a minimal startup entry point.
-Runtime mechanisms and application policy are implemented in the `app`, `charging`,
+The app owns raw battery charge admission and undervoltage policy; charging owns
+the verified inhibit/current/lock sequence. Runtime mechanisms and application
+policy are implemented in the `app`, `charging`,
 `vibration`, `buttons`, `leds`, `sensors`, `power`, `heater`, `pid`,
 and `storage` modules, with separate `mp2724` and `drv2624` drivers. Their APIs are
 in the matching user headers. The [runtime dispatcher](Massage_pen_FW/User/Src/runtime.c)

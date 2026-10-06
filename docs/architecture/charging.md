@@ -21,8 +21,11 @@ IC operation is documented in the [MP2724 reference](mp2724.md).
 The API, cell limits and agreed setpoints are in
 [charging.h](../../Massage_pen_FW/User/Inc/charging.h); register encodings and
 transaction contracts are in [mp2724.h](../../Massage_pen_FW/User/Inc/mp2724.h).
-Initialization accepts an explicit reviewed `Charging_Profile`, rather than
-constructing a profile from factory defaults. Startup and ordinary wake audit
+The baseline sequence verifies charger inhibit and zero precharge current, then
+locks parameters before profile audit, including with a NULL profile or refused
+idle lease. Buck operation remains available. Initialization accepts an explicit
+reviewed `Charging_Profile`, rather than constructing a profile from factory
+defaults. Startup and ordinary wake audit
 the configuration, restore differing stable fields with readback verification,
 then lock charging parameters. Reserved bits, commands and autonomous fields
 are handled separately. Input-limit audits cap the detected limit at the USB
@@ -37,6 +40,20 @@ is supplied; [main.c](../../Massage_pen_FW/Core/Src/main.c) passes NULL runtime
 profiles, so charger configuration readiness and ordinary startup completion
 remain gated.
 
+Raw battery eligibility is one admission gate alongside configuration, input and
+temperature status. With those gates satisfied, charging is first enabled at zero
+precharge current. After the charger is observed in precharge, a newer qualifying
+battery sample is required before the sequencer verifies inhibit, unlocks, writes
+and reads back the precharge current, relocks and re-enables charging. Phase
+departure and normal operation in either normal state drive current to zero at
+all requested levels; USB loss, pause and unavailable phase/eligibility also
+drive it to zero. A later precharge observation repeats fresh battery
+revalidation automatically while fault and retained-completion policy permit it.
+Fast-charge, CV and done phases command zero precharge current without toggling
+charge enable. Canceled writes remain unknown until drained and reconciled;
+transport exhaustion or refused leases keep requested and known hardware state
+separately visible.
+
 Status polling and interrupt refresh decode input readiness, charge phase,
 top-off, completion and faults. NTC status is treated as fresh only with ready
 input and buck enabled, and expires when the status round becomes stale.
@@ -49,8 +66,9 @@ through the application fault policy.
 The charger watchdog is enabled and serviced with valid USB input, including
 warm pauses and charge completion. Battery-only operation and sleep preparation
 disable it. Watchdog expiry restores/audits configuration only during startup
-or ordinary wake validation; runtime expiry faults. Sleep preparation drains
-transport before reporting readiness.
+or ordinary wake validation; runtime expiry faults. Sleep preparation verifies
+inhibit and zero precharge current, relocks parameters, disables the watchdog
+and drains transport before reporting readiness.
 
 Battery thresholds in [power.h](../../Massage_pen_FW/User/Inc/power.h) select
 application sleep or an immediate shipping request. The shipping mechanism verifies the
@@ -65,6 +83,8 @@ hardware hot fallback exceeds the cell charging limit and does not replace the
 MCU warm cutoff; watchdog expiry can restore factory NTC thresholds.
 Battery-only NTC freshness and discharge-temperature derating remain unresolved
 because VRNTC is documented for buck/boost operation and boost is disabled.
+Hardware acceptance must confirm precharge phase visibility at zero current and
+measure actual precharge current and transition latency.
 
 Completion survives a warm pause. Automatic recharge rearming after a
 warm/completed pause remains an open policy; no rearming action is implemented.
