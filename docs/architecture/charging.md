@@ -60,17 +60,16 @@ command is reported and never replayed. Without a lease, shipping stays pending.
 
 ## Open items
 
-The cell is 1S Li-ion; the NTC1 thermistor is near its centre. Pre-charge and
-disabled trickle charging still require cell-manufacturer confirmation. The
-configured hardware hot fallback exceeds the cell charging limit and does not
-replace the MCU warm cutoff; watchdog expiry can restore factory NTC thresholds.
+The cell is 1S Li-ion; the NTC1 thermistor is near its centre. The configured
+hardware hot fallback exceeds the cell charging limit and does not replace the
+MCU warm cutoff; watchdog expiry can restore factory NTC thresholds.
 Battery-only NTC freshness and discharge-temperature derating remain unresolved
 because VRNTC is documented for buck/boost operation and boost is disabled.
 
 Completion survives a warm pause. Automatic recharge rearming after a
 warm/completed pause remains an open policy; no rearming action is implemented.
-Remaining charger settings, including die thermal
-regulation, safety timeout and recharge/top-off choices, require a reviewed
-profile and hardware acceptance. Detailed charging-only LED policy is also
-open; the application currently displays normal-operation levels, low-battery
-notices and faults, with normal-operation levels taking precedence in Hybrid.
+Remaining charger settings, including die thermal regulation, safety timeout
+and recharge/top-off choices, require a reviewed profile and hardware
+acceptance. Charging display behavior is implemented in
+[app.c](../../Massage_pen_FW/User/Src/app.c) and [leds.c](../../Massage_pen_FW/User/Src/leds.c);
+production charging remains gated on the reviewed profile and idle lease.

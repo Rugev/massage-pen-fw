@@ -207,7 +207,8 @@ See [DRV2624 requirements](../../architecture/drv2624.md).
 - All faults latch until reboot, including battery cold/hot. Disable SYS_ON and
   display the fault for 60 s, then enter RAM-retaining fault sleep.
 - Fault wake keeps SYS_ON off, skips measurements/ordinary wake validation,
-  displays the retained fault for 10 s and sleeps again.
+  displays the retained fault for 10 s and sleeps again; LEDs are off in
+  `APP_FAULT_SLEEP`.
 - Ignore the usual 1 s shutdown gesture in fault states. A 10 s button hold is
   intended to trigger the charger hardware power reset; firmware does not
   guarantee that reset and the wiring requires hardware verification.
@@ -231,12 +232,13 @@ Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
 | 11 | Vibration communication/readback failure |
 | 12 | ADC acquisition failure |
 | 13 | Vibration calibration failure |
+| 14 | Battery below charging admission threshold |
 
 ## Open items for planning
 
 - Battery-only STATUS3 freshness remains unresolved; do not assume live NTC data.
-- Remaining charger profile/settings, charge-LED behavior and recharge policy
-  remain unresolved; preserve [existing charging requirements](../../architecture/charging.md).
+- Remaining charger profile/settings and recharge policy remain unresolved;
+  preserve [existing charging requirements](../../architecture/charging.md).
 - Validate provisional electrical validity limits and tune heater gains on hardware.
 - Agree the validated motor configuration/calibration timing, production idle lease and MCU watchdog. No default charger or motor profile or idle lease is supplied; charging and vibration readiness remain gated until approved profiles and lease are provided.
 - Select a RAM-retaining low-power mode and verify wake/reset wiring and generated

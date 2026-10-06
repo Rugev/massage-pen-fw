@@ -26,8 +26,12 @@ pattern phase. Pattern constants and polarity are in
 [leds.h](../../Massage_pen_FW/User/Inc/leds.h); fault priority is defined by
 [app.c](../../Massage_pen_FW/User/Src/app.c).
 
-Charging while normal uses the normal-operation display. Detailed charging-only
-LED policy remains unresolved; the current app requests LEDs off in charging and
-recovery states. Pins and ports for all buttons/LEDs come from
+During admitted charging, the battery indicator breathes while charging and is
+solid green at completion. A non-error pause leaves it off; normal operation
+also shows solid green when charging is not paused. Charging-only mode shows
+charge progress, while Hybrid retains the normal-operation level display.
+Charging display behavior is implemented in
+[app.c](../../Massage_pen_FW/User/Src/app.c) and [leds.c](../../Massage_pen_FW/User/Src/leds.c).
+Pins and ports for all buttons/LEDs come from
 [main.h](../../Massage_pen_FW/Core/Inc/main.h); consult the read-only
 [.ioc](../../Massage_pen_FW/Massage_pen_FW.ioc) for generated configuration.
