@@ -3,6 +3,7 @@
 #include "buttons.h"
 #include "leds.h"
 #include "main.h"
+#include "mp2724.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -571,7 +572,79 @@ static void test_charger_receives_policy_before_progress(void) {
     CHECK(!app_charge_update_eligible && app_charge_update_fault);
     CHECK(!app_charge_demand && app_charge_fault);
 }
+#define OUT(name) FakeHAL_GetOutput(name##_GPIO_Port,name##_Pin)
+static void render(uint32_t now) { tick(now); Leds_Update(now); }
+static void charge_display_ready(void) {
+ app_charge.input_valid=true; app_charge.admitted=true; app_charge.active_charging=true;
+ app_charge.status_ready=true;
+}
+/* Wrong admission/freshness/voltage guards would manufacture progress here. */
+static void test_independent_charge_display(void) {
+ const uint32_t mv[]={3599U,3600U,3899U,3900U};
+ const bool second[]={false,true,true,true},third[]={false,false,false,true};
+ for(unsigned band=0U;band<4U;++band) {
+  reset(0U);ready();charge_display_ready();app_charge.status_ms=20U;
+  app_sensors.filtered_battery_mv=mv[band];render(20U);
+  CHECK(state()==APP_CHARGING);CHECK(!OUT(LED_HEAT_1) && !OUT(LED_HEAT_2) && !OUT(LED_HEAT_3));
+  CHECK(OUT(LED_VIBRATION_1) && OUT(LED_VIBRATION_2)==second[band] && OUT(LED_VIBRATION_3)==third[band]);
+  CHECK(!OUT(BAT_LED_G));
+  app_charge.status_ms=1020U;render(1020U);CHECK(OUT(BAT_LED_G));
+  app_charge.active_charging=false;app_charge.completed=true;app_charge.phase=MP2724_CHG_STAT_DONE;
+  app_charge.status_ms=1021U;render(1021U);
+  CHECK(OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));
+  app_charge.topoff_active=true;app_charge.status_ms=1022U;render(1022U);
+  CHECK(!OUT(BAT_LED_G) && OUT(LED_VIBRATION_1));
+  app_charge.topoff_active=false;app_charge.paused=true;app_charge.warm=true;
+  app_charge.status_ms=1023U;render(1023U);CHECK(state()==APP_CHARGING && !OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));
+  app_charge.charger_fault=true;render(1024U);CHECK(OUT(BAT_LED_R) && !OUT(BAT_LED_G));
+  render(1024U+APP_FAULT_INITIAL_DISPLAY_MS);
+  CHECK(state()==APP_FAULT_SLEEP && !OUT(BAT_LED_R) && !OUT(BAT_LED_G));
+  CHECK(!OUT(LED_HEAT_1) && !OUT(LED_VIBRATION_1));
+ }
+ for(unsigned invalid=0U;invalid<8U;++invalid) {
+  reset(0U);ready();charge_display_ready();app_charge.status_ms=20U;
+  switch(invalid) {
+   case 0U:app_charge.admitted=false;break;
+   case 1U:app_charge.status_ready=false;break;
+   case 2U:app_charge.status_ms=20U-111U;break;
+   case 3U:app_sensors.available=false;break;
+   case 4U:app_sensors.battery_current_valid=false;break;
+   case 5U:app_sensors.battery_fresh=false;break;
+   case 6U:app_charge.active_charging=false;break;
+   case 7U:app_sensors.battery_valid=false;break;
+  }
+  render(20U);CHECK(!OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));
+ }
+ /* A retained completion flag alone cannot claim completion. */
+ for(unsigned invalid=0U;invalid<3U;++invalid) {
+  reset(0U);ready();charge_display_ready();app_charge.status_ms=20U;
+  app_charge.active_charging=false;app_charge.completed=true;app_charge.phase=MP2724_CHG_STAT_DONE;
+  if(invalid==0U) app_charge.admitted=false;
+  if(invalid==1U) app_charge.status_ms=20U-111U;
+  if(invalid==2U) app_charge.phase=MP2724_CHG_STAT_PRECHARGE;
+  render(20U);CHECK(!OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));
+ }
+ /* Recovery has the same guards; USB/paused/unadmitted alone has no progress. */
+ reset(0U);ready();app_charge.input_valid=true;
+ app_sensors.battery_mv=BATTERY_STANDBY_MV;render(20U);
+ CHECK(state()==APP_CHARGING_RECOVERY && !OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));
+ app_charge.charger_fault=true;render(21U);CHECK(OUT(BAT_LED_R) && !OUT(BAT_LED_G));
+ normal(0U);render(400U);CHECK(OUT(BAT_LED_G));
+ charge_display_ready();app_charge.status_ms=401U;render(401U);
+ CHECK(state()==APP_CHARGING_NORMAL && !OUT(BAT_LED_G));
+ CHECK(OUT(LED_HEAT_1) && OUT(LED_VIBRATION_1) && !OUT(LED_VIBRATION_2));
+ app_charge.status_ms=1401U;render(1401U);CHECK(OUT(BAT_LED_G));
+ app_charge.paused=true;app_charge.warm=true;app_charge.status_ms=1402U;render(1402U);
+ CHECK(!OUT(BAT_LED_G) && OUT(LED_VIBRATION_1));
+ app_charge.charger_fault=true;render(1403U);CHECK(OUT(BAT_LED_R) && !OUT(BAT_LED_G));
+ /* Zero levels retain normal display precedence over highest charging band. */
+ reset(0U);ready();app_settings=(Storage_Settings){0U,0U};raw_power(true);
+ tick(0U);tick(20U);tick(320U);charge_display_ready();app_charge.status_ms=400U;
+ app_sensors.filtered_battery_mv=4000U;render(400U);
+ CHECK(state()==APP_CHARGING_NORMAL && !OUT(LED_VIBRATION_1) && !OUT(LED_VIBRATION_3));
+}
 int main(void) {
+    test_independent_charge_display();
     test_charger_receives_policy_before_progress();
     test_raw_battery_admission_and_undervoltage();
     test_raw_power_wake_rearms_cached_hold_and_debounces();

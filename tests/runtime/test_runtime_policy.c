@@ -5,6 +5,11 @@
 #include "mp2724.h"
 #include <assert.h>
 #include <stdio.h>
+static void assert_leds_off(void) {
+ const uint16_t pins[]={LED_HEAT_1_Pin,LED_HEAT_2_Pin,LED_HEAT_3_Pin,LED_VIBRATION_1_Pin,LED_VIBRATION_2_Pin,LED_VIBRATION_3_Pin,BAT_LED_R_Pin,BAT_LED_G_Pin};
+ GPIO_TypeDef *ports[]={LED_HEAT_1_GPIO_Port,LED_HEAT_2_GPIO_Port,LED_HEAT_3_GPIO_Port,LED_VIBRATION_1_GPIO_Port,LED_VIBRATION_2_GPIO_Port,LED_VIBRATION_3_GPIO_Port,BAT_LED_R_GPIO_Port,BAT_LED_G_GPIO_Port};
+ for(unsigned i=0U;i<8U;++i) assert(!FakeHAL_GetOutput(ports[i],pins[i]));
+}
 static bool leased;
 static bool acquire(uint8_t reg) { (void)reg; assert(!leased); leased=true; return true; }
 static void release(uint8_t reg) { (void)reg; assert(leased); leased=false; }
@@ -44,7 +49,9 @@ int main(void)
     assert(FakeHAL_GetSysOn()==GPIO_PIN_RESET && hw_tim.CCR1==0U && hw_pwm_applied==0U);
     ticks(60010U);
     assert(App_GetSnapshot().state==APP_FAULT_SLEEP && Runtime_GetObservation().polling_sleep);
+    assert_leds_off();
     triggers=hw_adc_starts; ticks(20U); assert(hw_adc_starts==triggers);
+    assert_leds_off();
     /* Held enabling/fault button cannot wake; charger episode retains latch. */
     assert(App_GetSnapshot().state==APP_FAULT_SLEEP);
     FakeHAL_SetInput(CHRG_INT_GPIO_Port,CHRG_INT_Pin,GPIO_PIN_RESET); Runtime_Poll();

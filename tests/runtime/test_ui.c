@@ -117,7 +117,7 @@ static void raw_wake_rearms_only_its_button_and_requires_stability(void)
 }
 static void leds(void) {
  FakeHAL_Reset(); Leds_Init(0);
- Leds_Display d={.mode=LEDS_LEVELS,.heat_level=2,.vibration_level=1,.battery_green=true};
+ Leds_Display d={.mode=LEDS_LEVELS,.heat_level=2,.vibration_level=1,.battery_pattern=LEDS_BATTERY_GREEN};
  Leds_Request(&d,0); Leds_Update(0);
  assert(OUT(LED_HEAT_1) && OUT(LED_HEAT_2) && !OUT(LED_HEAT_3));
  assert(OUT(LED_VIBRATION_1) && !OUT(LED_VIBRATION_2) && !OUT(LED_VIBRATION_3)); assert(OUT(BAT_LED_G));
@@ -141,4 +141,52 @@ static void leds(void) {
  d=(Leds_Display){.mode=LEDS_OFF}; Leds_Request(&d,5000); Leds_Update(5000); assert(!OUT(BAT_LED_R) && !OUT(BAT_LED_G));
  for(unsigned j=0;j<6;j++) assert(!FakeHAL_GetOutput(ports[j],pins[j]));
 }
-int main(void) { raw_wake_rearms_only_its_button_and_requires_stability(); verified_wake_replaces_cached_press(); buttons(); leds(); Storage_Settings s=Storage_Load(); assert(s.heat_level==1 && s.vibration_level==1); s.heat_level=3; s.vibration_level=0; s=Storage_Load(); assert(s.heat_level==1 && s.vibration_level==1); puts("ui tests passed"); }
+static void heater_phase_survives_level_changes(void) {
+ Leds_Init(0U);
+ Leds_Display d={.mode=LEDS_LEVELS,.heat_level=1U,.heater_breathe=true};
+ Leds_Request(&d,0U); Leds_Update(1000U); assert(OUT(LED_HEAT_1));
+ d.vibration_level=2U; d.heat_level=3U;
+ Leds_Request(&d,1000U); Leds_Update(1000U);
+ assert(OUT(LED_HEAT_1) && OUT(LED_HEAT_3));
+}
+/* A band/level change must preserve both animation clocks, even over wrap. */
+static void independent_battery_and_progress_patterns(void) {
+ for(unsigned wrap=0U;wrap<2U;++wrap) {
+  uint32_t base=wrap ? UINT32_MAX-800U : 0U;
+  Leds_Init(base);
+  Leds_Display d={.mode=LEDS_CHARGING,.battery_pattern=LEDS_BATTERY_BREATHE,.charging_progress=1U};
+  Leds_Request(&d,base);
+  unsigned green[2000],counts[4]={0U};
+  for(uint32_t t=0U;t<2000U;++t) {
+   Leds_Update(base+t);green[t]=OUT(BAT_LED_G);counts[t/500U]+=green[t];
+   assert(OUT(LED_VIBRATION_1)==((t/500U)%2U==0U));
+   assert(!OUT(LED_VIBRATION_2) && !OUT(LED_VIBRATION_3));
+   assert(!OUT(LED_HEAT_1) && !OUT(BAT_LED_R));
+  }
+  assert(counts[0]<counts[1] && counts[3]<counts[2]);
+  d.charging_progress=2U; Leds_Request(&d,base+2500U);Leds_Update(base+2500U);
+  assert(OUT(LED_VIBRATION_1) && !OUT(LED_VIBRATION_2) && !OUT(LED_VIBRATION_3));
+  d.charging_progress=3U; Leds_Request(&d,base+2501U);Leds_Update(base+2501U);
+  assert(OUT(LED_VIBRATION_1) && OUT(LED_VIBRATION_2) && !OUT(LED_VIBRATION_3));
+  d.mode=LEDS_LEVELS;d.heater_breathe=true;d.heat_level=2U;d.vibration_level=0U;
+  Leds_Request(&d,base+2502U);
+  for(uint32_t t=2502U;t<4502U;++t) {
+   if(t==3000U) {d.heat_level=3U;d.vibration_level=2U;Leds_Request(&d,base+t);}
+   Leds_Update(base+t);assert(OUT(BAT_LED_G)==green[t%2000U]);
+   assert(OUT(LED_HEAT_1)==OUT(LED_HEAT_2));
+  }
+  Leds_Update(base+5000U);assert(OUT(LED_HEAT_1)==OUT(LED_HEAT_3));
+  /* Battery pattern changes do not restart heater modulation. */
+  Leds_Update(base+5502U);assert(OUT(LED_HEAT_1));
+  d.battery_pattern=LEDS_BATTERY_OFF;Leds_Request(&d,base+5502U);Leds_Update(base+5502U);
+  assert(OUT(LED_HEAT_1) && !OUT(BAT_LED_G));
+  d.battery_pattern=LEDS_BATTERY_GREEN;Leds_Request(&d,base+5503U);Leds_Update(base+5503U);
+  assert(OUT(BAT_LED_G));
+  d.mode=LEDS_FAULT;d.fault_code=63U;Leds_Request(&d,base+5600U);
+  d.heat_level=0U;d.vibration_level=0U;d.charging_progress=1U;
+  Leds_Request(&d,base+5700U);Leds_Update(base+5700U);
+  assert(!OUT(BAT_LED_R) && !OUT(BAT_LED_G));
+  assert(OUT(LED_HEAT_3) && OUT(LED_VIBRATION_3));
+ }
+}
+int main(void) { independent_battery_and_progress_patterns(); heater_phase_survives_level_changes(); raw_wake_rearms_only_its_button_and_requires_stability(); verified_wake_replaces_cached_press(); buttons(); leds(); Storage_Settings s=Storage_Load(); assert(s.heat_level==1 && s.vibration_level==1); s.heat_level=3; s.vibration_level=0; s=Storage_Load(); assert(s.heat_level==1 && s.vibration_level==1); puts("ui tests passed"); }
