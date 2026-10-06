@@ -27,7 +27,7 @@ static void release(uint8_t r)
 static const I2C_DeviceOps ops={read_it,write_it,stop};
 static const Charging_IdleOps idle={acquire,release};
 static Charging_Profile profile(void)
-{return (Charging_Profile){.agreed=true,.registers={0x10,0,0x63,0x13,0x06,0x18,0x04,0x1e,0x20,0x03,0x20,0x51,0x21,0x4e,0,0},.idle=&idle};}
+{return (Charging_Profile){.agreed=true,.registers={0x10,0,(MP2724_VPRE_3000_MV << MP2724_VPRE_SHIFT) | 0x23, ((CHARGER_PRECHARGE_OPERATING_CURRENT_MA / MP2724_IPRE_STEP_MA) << MP2724_IPRE_SHIFT) | 3U,0x06,0x18,0x04,0x1e,0x20,0x03,0x20,0x51,0x21,0x4e,0,0},.idle=&idle};}
 static void reset(const Charging_Profile *p)
 {
  FakeHAL_Reset();memset(regs,0,sizeof regs);memset(status_reads,0,sizeof status_reads);
@@ -125,7 +125,8 @@ static void shipping_commands_and_drain(void)
  assert(!unrelated_commands);run(100);assert(shipping_writes==1);
  assert(!Charging_RequestShipping());
  reset(&p);ready();assert(Charging_RequestShipping());run(100);assert(Charging_GetObservation().shipping_accepted&&shipping_writes==1);
- reset(&p);for(unsigned i=0;i<600;i++){Charging_Update(available);if(pending&&writing&&reg==1)break;if(pending)complete();FakeHAL_AdvanceTick(1);}assert(pending&&writing&&reg==1);drain_ready=false;Charging_RequestPrepareSleep();run(30);
+ reset(&p);for(unsigned i=0;i<600;i++){Charging_Update(available);if(pending&&writing&&reg==1)break;if(pending)complete();
+  FakeHAL_AdvanceTick(1);}assert(pending&&writing&&reg==1);drain_ready=false;Charging_RequestPrepareSleep();run(30);
  assert(leased&&Charging_GetObservation().idle_lease&&!Charging_GetObservation().sleep_ready);
  drain_ready=true;run(40);assert(!leased&&leases==releases);
 }
@@ -275,8 +276,57 @@ static void battery_only_configuration_uses_explicit_idle_lease(void)
     assert(leases != 0U && leases == releases && !leased);
     assert(regs[1] == 14U && !(regs[7] & MP2724_WATCHDOG_MASK));
 }
+static void safe_baseline_without_profile_or_lease(void)
+{
+ for(unsigned mode=0;mode<3;mode++) {
+  Charging_Profile p=profile();if(mode==1)p.agreed=false;
+  reset(mode==0?NULL:&p);allow_idle=false;regs[3]=0xf3;
+  for(unsigned i=0;i<200;i++) {
+   step();
+   if(pending && (reg==0 || reg==1)) assert(!(regs[9]&MP2724_EN_CHG_MASK) && !(regs[3]&MP2724_IPRE_MASK));
+  }
+  assert(!(regs[9]&MP2724_EN_CHG_MASK));
+  assert(!(regs[3]&MP2724_IPRE_MASK));
+  assert((regs[9]&MP2724_EN_BUCK_MASK) && (regs[3]&MP2724_ITERM_MASK)==3U);
+  assert(!Charging_GetObservation().configuration_ready);
+  assert(Charging_GetObservation().safe_baseline_ready);
+ }
+}
+static void baseline_cancellation_reconciles_transmitted_write(void)
+{
+ reset(NULL);regs[3]=0xf3;
+ for(unsigned i=0;i<100;i++) {
+  Charging_Update(available);
+  if(pending&&writing&&reg==3)break;
+  if(pending)complete();
+  FakeHAL_AdvanceTick(1);
+ }
+ assert(pending&&writing&&reg==3);complete();
+ Charging_BeginValidation();
+ assert(!Charging_GetObservation().safe_baseline_ready);
+ run(100);assert(Charging_GetObservation().safe_baseline_ready);
+ assert(!(regs[9]&1)&&!(regs[3]&MP2724_IPRE_MASK));
+}
+static void stale_input_completion_cannot_restore_validation_readiness(void)
+{
+ Charging_Profile p=profile();reset(&p);ready();Charging_OnInterrupt();
+ for(unsigned i=0;i<200;i++) {
+  Charging_Update(available);
+  if(pending&&!writing&&reg==1&&leased)break;
+  if(pending)complete();
+  FakeHAL_AdvanceTick(1);
+ }
+ assert(pending&&!writing&&reg==1&&leased);
+ complete();Charging_BeginValidation();allow_idle=false;run(150);
+ assert(!Charging_GetObservation().configuration_ready);
+ assert(Charging_GetObservation().safe_baseline_ready);
+ assert(!leased&&leases==releases);
+}
 int main(void)
 {
+ baseline_cancellation_reconciles_transmitted_write();
+ stale_input_completion_cannot_restore_validation_readiness();
+ safe_baseline_without_profile_or_lease();
  battery_only_configuration_uses_explicit_idle_lease();
  monitoring_without_profile();verified_configuration_and_idle_lease();polling_interrupts_and_errors();
  watchdog_recovery_and_runtime_fault();warm_completion_and_usb_watchdog();shipping_commands_and_drain();stale_ntc_and_retained_faults();source_changes_and_refresh_fairness();freshness_requires_powered_ntc();

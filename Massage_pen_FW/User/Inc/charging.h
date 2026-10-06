@@ -25,11 +25,10 @@
 #define CHARGER_SOURCE_DETECTION_ENABLED        1U
 #define CHARGER_SYS_MIN_MV                      2975U
 
-/* Pending manufacturer confirmation: verify both the pre-charge current and
- * threshold, and whether deeply discharged cells may be recovered at all.
- */
-#define CHARGER_PRECHARGE_CURRENT_MA            20U
-#define CHARGER_PRECHARGE_THRESHOLD_MV          2800U
+/* Reviewed safe and admitted pre-charge targets. Hardware acceptance remains pending. */
+#define CHARGER_PRECHARGE_SAFE_CURRENT_MA       0U
+#define CHARGER_PRECHARGE_OPERATING_CURRENT_MA  240U
+#define CHARGER_PRECHARGE_THRESHOLD_MV          3000U
 /* Trickle charging is disabled by selecting zero current. Check this setting
  * and the permitted deep-discharge recovery procedure with the manufacturer.
  */
@@ -94,6 +93,7 @@ typedef struct {
 } Charging_Profile;
 typedef struct {
     bool profile_valid, configuration_ready, status_ready;
+    bool safe_baseline_ready;
     bool input_valid, input_ready, active_charging, topoff_active;
     uint8_t phase, ntc1, status[6];
     bool ntc_fresh, cold, hot, cool, warm, paused, completed;

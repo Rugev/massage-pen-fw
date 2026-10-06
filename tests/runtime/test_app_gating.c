@@ -61,7 +61,7 @@ static void battery_only_validation_finishes(bool enable)
      * explicit test agreements and do not resolve battery-only NTC freshness. */
     const Charging_IdleOps idle = {acquire_idle, release_idle};
     const Charging_Profile charger = {.agreed=true,
-        .registers={0x10,0,0x63,0x13,0x06,0x18,0x04,0x1e,0x20,0x03,0x20,0x51,0x21,0x4e,0,0},
+        .registers={0x10,0,(MP2724_VPRE_3000_MV << MP2724_VPRE_SHIFT) | 0x23, ((CHARGER_PRECHARGE_OPERATING_CURRENT_MA / MP2724_IPRE_STEP_MA) << MP2724_IPRE_SHIFT) | 3U,0x06,0x18,0x04,0x1e,0x20,0x03,0x20,0x51,0x21,0x4e,0,0},
         .idle=&idle};
     const Vibration_Profile motor = {.validated=true,
         .mode=0x08, .control=0x80, .feedback_control=0x52, .rated_voltage=0x33, .od_clamp=0x44,

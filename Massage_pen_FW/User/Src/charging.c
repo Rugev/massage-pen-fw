@@ -6,13 +6,15 @@
 typedef enum {
     OP_NONE, OP_STATUS, OP_CTRL4, OP_CTRL3, OP_CTRL2, OP_AUDIT,
     OP_CONFIG, OP_LOCK, OP_WATCHDOG, OP_SERVICE, OP_CHARGE,
-    OP_SHIP_DELAY, OP_SHIP, OP_INPUT_AUDIT, OP_INPUT_CONFIG
+    OP_SHIP_DELAY, OP_SHIP, OP_INPUT_AUDIT, OP_INPUT_CONFIG, OP_INHIBIT, OP_ZERO
 } Operation;
 static const Charging_Profile *profile;
 static Charging_Observation observation;
 static Operation operation;
 static uint8_t config_index, config_mask, config_value, poll_index;
 static uint8_t ctrl2, ctrl4;
+static bool enable_known, ipre_known, lock_known, baseline_required, charge_target;
+static uint8_t ipre, parameter_lock;
 static bool ctrl2_known, ctrl4_known, validation, need_config, lock_pending;
 static bool charge_required, sleep_requested, shipping_requested;
 static bool watchdog_running, service_due, recovering_watchdog;
@@ -24,6 +26,18 @@ static volatile bool interrupt_pending;
 /* Poll a complete fixed-order round. An interrupt never rewinds the cursor. */
 static const uint8_t status_order[] = {1U, 2U, 3U, 0U, 4U, 5U};
 
+static void refresh_baseline(void)
+{
+    observation.safe_baseline_ready = enable_known && !(ctrl4 & MP2724_EN_CHG_MASK) &&
+        ipre_known && !(ipre & MP2724_IPRE_MASK);
+}
+static bool readiness_allowed(void)
+{
+    return !baseline_required && lock_known && (parameter_lock & MP2724_LOCK_CHG_MASK) &&
+        observation.profile_valid && !need_config &&
+        !observation.charger_fault && !observation.watchdog_fault &&
+        !observation.communication_fault && !observation.cold && !observation.hot;
+}
 static uint8_t stable_mask(uint8_t index)
 {
     const mp2724_register_info_t *info = &mp2724_registers[index];
@@ -42,8 +56,8 @@ static bool valid_profile(const Charging_Profile *p)
     return (v[0] & (MP2724_LOCK_CHG_MASK | MP2724_EN_PG_NTC2_MASK)) == MP2724_LOCK_CHG_MASK &&
         (v[1] & MP2724_IIN_MODE_MASK) == 0U &&
         MP2724_FIELD_GET(MP2724_ICC_MASK, MP2724_ICC_SHIFT, v[2]) * MP2724_ICC_STEP_MA <= BATTERY_MAX_CHARGE_CURRENT_MA &&
-        MP2724_FIELD_GET(MP2724_VPRE_MASK, MP2724_VPRE_SHIFT, v[2]) == MP2724_VPRE_2800_MV &&
-        MP2724_FIELD_GET(MP2724_IPRE_MASK, MP2724_IPRE_SHIFT, v[3]) * MP2724_IPRE_STEP_MA == CHARGER_PRECHARGE_CURRENT_MA &&
+        MP2724_FIELD_GET(MP2724_VPRE_MASK, MP2724_VPRE_SHIFT, v[2]) == MP2724_VPRE_3000_MV &&
+        MP2724_FIELD_GET(MP2724_IPRE_MASK, MP2724_IPRE_SHIFT, v[3]) * MP2724_IPRE_STEP_MA == CHARGER_PRECHARGE_OPERATING_CURRENT_MA &&
         MP2724_FIELD_GET(MP2724_ITERM_MASK, MP2724_ITERM_SHIFT, v[3]) * MP2724_ITERM_STEP_MA + MP2724_ITERM_OFFSET_MA == BATTERY_TERMINATION_CURRENT_MA &&
         (v[4] & MP2724_ITRICKLE_MASK) == 0U &&
         MP2724_FIELD_GET(MP2724_VBATT_MASK, MP2724_VBATT_SHIFT, v[5]) * MP2724_VBATT_STEP_MV + MP2724_VBATT_OFFSET_MV == BATTERY_MAX_MV &&
@@ -89,6 +103,10 @@ static bool configure(uint8_t reg, uint8_t mask, uint8_t value, Operation next)
     bool accepted = idle ? MP2724_RequestConfigIdle(reg, mask, value) : MP2724_RequestConfig(reg, mask, value);
     if (!accepted) { if (idle) release_idle(); return false; }
     if (reg == MP2724_REG_CHG_CTRL2) ctrl2_known = false;
+    if (reg == MP2724_REG_CHG_CTRL4) enable_known = ctrl4_known = false;
+    if (reg == MP2724_REG_CHG_PARAMETER1) ipre_known = false;
+    if (reg == MP2724_REG_CHG_CTRL0) lock_known = false;
+    refresh_baseline();
     observation.sleep_ready = false;
     operation = next;
     return true;
@@ -113,7 +131,9 @@ static void cancel_operation(void)
     /* Dispatch of a side-effect command closes its lifecycle even if cancel
      * prevents the observation. A pending/uncertain write cannot be replayed. */
     if (operation == OP_SHIP) record_shipping_outcome(MP2724_GetResult().state);
-    ctrl2_known = false;
+    ctrl2_known = enable_known = ipre_known = lock_known = ctrl4_known = false;
+    baseline_required = true; charge_target = false;
+    refresh_baseline();
     observation.sleep_ready = false;
     MP2724_Cancel();
     cancel_requested = true;
@@ -144,6 +164,8 @@ static void decode_status(uint8_t index, uint8_t value)
             observation.configuration_ready = false;
         }
         if (value & MP2724_WATCHDOG_FAULT_MASK) {
+            enable_known = ipre_known = lock_known = false;
+            baseline_required = true; charge_target = false; refresh_baseline();
             observation.configuration_ready = false;
             if (validation) {
                 if (!recovering_watchdog) {need_config = observation.profile_valid; config_index = 0U;}
@@ -182,13 +204,14 @@ static uint8_t expected_config(uint8_t index, uint8_t current)
         uint8_t ceiling = (CHARGER_USB_INPUT_MAX_MA - MP2724_IIN_LIM_OFFSET_MA) / MP2724_IIN_LIM_STEP_MA;
         value = code < ceiling ? code : ceiling;
     }
+    if (index == 3U) value &= (uint8_t)~MP2724_IPRE_MASK;
     if (index == 7U) {
         value &= (uint8_t)~MP2724_WATCHDOG_MASK;
         if (observation.input_valid) value |= MP2724_WATCHDOG_40_S << MP2724_WATCHDOG_SHIFT;
     }
     if (index == 9U) {
         /* Auditing an already-completed or paused cycle never enables it. */
-        value = (value & (uint8_t)~MP2724_EN_CHG_MASK) | (current & MP2724_EN_CHG_MASK);
+        value = (value & (uint8_t)~MP2724_EN_CHG_MASK) | (charge_target ? MP2724_EN_CHG_MASK : 0U);
     }
     return value;
 }
@@ -196,6 +219,7 @@ static void consume_result(I2C_DeviceResult result)
 {
     if (operation == OP_NONE || result.state == I2C_RESULT_PENDING || result.state == I2C_RESULT_IDLE) return;
     if (result.exhausted) {
+        enable_known = ipre_known = lock_known = false; refresh_baseline();
         observation.communication_fault = true;
         observation.configuration_ready = false;
         observation.ntc_fresh = false;
@@ -217,6 +241,7 @@ static void consume_result(I2C_DeviceResult result)
         return;
     }
     if (result.state == I2C_RESULT_FAILED || result.state == I2C_RESULT_REJECTED) {
+        enable_known = ipre_known = lock_known = false; refresh_baseline();
         observation.communication_fault = true;
         observation.configuration_ready = false;
         observation.ntc_fresh = false;
@@ -224,12 +249,21 @@ static void consume_result(I2C_DeviceResult result)
         return;
     }
     switch (done) {
+    case OP_INHIBIT:
+        ctrl4 = result.value; ctrl4_known = enable_known = true;
+        refresh_baseline();
+        break;
+    case OP_ZERO:
+        ipre = result.value; ipre_known = true;
+        refresh_baseline();
+        if (observation.safe_baseline_ready) baseline_required = false;
+        break;
     case OP_STATUS:
         decode_status(status_order[poll_index], result.value);
         poll_index++;
         break;
     case OP_CTRL4:
-        ctrl4 = result.value; ctrl4_known = true; poll_index++;
+        ctrl4 = result.value; ctrl4_known = enable_known = true; refresh_baseline(); poll_index++;
         observation.ntc_fresh = observation.input_ready && (ctrl4 & MP2724_EN_BUCK_MASK) != 0U;
         observation.cool = observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_COOL;
         observation.warm = observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_WARM;
@@ -262,20 +296,26 @@ static void consume_result(I2C_DeviceResult result)
         }
         config_mask = stable_mask(config_index);
         config_value = expected_config(config_index, result.value);
-        if (config_index == 9U) {ctrl4 = result.value; ctrl4_known = true;}
+        if (config_index == 9U) {ctrl4 = result.value; ctrl4_known = enable_known = true;}
+        if (config_index == 3U) {ipre = result.value; ipre_known = true;}
+        if (config_index == 0U) {parameter_lock = result.value; lock_known = true;}
+        refresh_baseline();
         if (config_index == 7U) {ctrl2 = result.value; ctrl2_known = true;}
         if ((result.value & config_mask) == config_value) next_config();
         else config_write_due = true;
         break;
     case OP_CONFIG:
         if (config_index == 7U) {ctrl2 = result.value;ctrl2_known = true;}
-        if (config_index == 9U) ctrl4 = result.value;
+        if (config_index == 9U) {ctrl4 = result.value; ctrl4_known = enable_known = true;}
+        if (config_index == 3U) {ipre = result.value; ipre_known = true;}
+        if (config_index == 0U) {parameter_lock = result.value; lock_known = true;}
+        refresh_baseline();
         next_config();
         break;
     case OP_LOCK:
         lock_pending = need_config = false;
-        observation.configuration_ready = !observation.charger_fault && !observation.watchdog_fault &&
-            !observation.communication_fault && !observation.cold && !observation.hot;
+        parameter_lock = result.value; lock_known = true;
+        observation.configuration_ready = readiness_allowed();
         break;
     case OP_WATCHDOG:
         ctrl2 = result.value; ctrl2_known = true;
@@ -293,7 +333,7 @@ static void consume_result(I2C_DeviceResult result)
         if (recovering_watchdog) {recovering_watchdog = false;interrupt_pending = true;}
         break;
     case OP_CHARGE:
-        ctrl4 = result.value;
+        ctrl4 = result.value; ctrl4_known = enable_known = true; refresh_baseline();
         observation.paused = !(ctrl4 & MP2724_EN_CHG_MASK) && observation.warm;
         break;
     case OP_SHIP_DELAY: release_idle(); shipping_stage = 2U; break;
@@ -302,14 +342,14 @@ static void consume_result(I2C_DeviceResult result)
         config_value = expected_config(1U, result.value);
         if (result.value == config_value) {
             input_audit_due = false;
-            observation.configuration_ready = !need_config && observation.profile_valid;
+            observation.configuration_ready = readiness_allowed();
             release_idle();
         }
         else {observation.configuration_ready = false;input_write_due = true;}
         break;
     case OP_INPUT_CONFIG:
         input_audit_due = false;
-        observation.configuration_ready = true;
+        observation.configuration_ready = readiness_allowed();
         release_idle();
         break;
     case OP_NONE: break;
@@ -324,6 +364,8 @@ void Charging_Init(const Charging_Profile *p)
     config_index = poll_index = shipping_stage = 0U;
     config_mask = config_value = ctrl2 = ctrl4 = 0U;
     ctrl2_known = ctrl4_known = lock_pending = false;
+    enable_known = ipre_known = lock_known = charge_target = false;
+    baseline_required = true; ipre = parameter_lock = 0U;
     charge_required = sleep_requested = shipping_requested = false;
     watchdog_running = service_due = recovering_watchdog = false;
     poll_active = cancel_requested = available_before = false;
@@ -336,6 +378,8 @@ void Charging_Init(const Charging_Profile *p)
 void Charging_BeginValidation(void)
 {
     validation = true;
+    baseline_required = true; charge_target = false;
+    enable_known = ipre_known = lock_known = false; refresh_baseline();
     ctrl2_known = false;
     config_write_due = input_write_due = false;
     input_audit_due = false;
@@ -386,7 +430,8 @@ void Charging_Update(bool available)
         observation.cool = observation.warm = false;
         observation.sleep_ready = false;
         config_write_due = input_write_due = false;
-        ctrl2_known = ctrl4_known = false;
+        ctrl2_known = ctrl4_known = enable_known = ipre_known = lock_known = false;
+        baseline_required = true; charge_target = false; refresh_baseline();
         input_audit_due = false;
         if (!cancel_requested) cancel_operation();
     } else if (!available_before) {
@@ -403,6 +448,12 @@ void Charging_Update(bool available)
     observation.recovering = result.recovering;
     consume_result(result);
     if (!available || result.recovering || result.state == I2C_RESULT_PENDING || cancel_requested) return;
+    if (operation == OP_NONE && baseline_required && !observation.communication_fault) {
+        if (!enable_known || (ctrl4 & MP2724_EN_CHG_MASK)) {
+            configure(MP2724_REG_CHG_CTRL4, MP2724_EN_CHG_MASK, 0U, OP_INHIBIT); return;
+        }
+        configure(MP2724_REG_CHG_PARAMETER1, MP2724_IPRE_MASK, 0U, OP_ZERO); return;
+    }
     /* Audit/read and verified write are separate stages sharing the lease. */
     if (config_write_due) {
         uint8_t reg = mp2724_registers[config_index].address;
@@ -462,9 +513,11 @@ void Charging_Update(bool available)
         bool pause = observation.warm;
         bool enable = desired_charge() && !observation.completed;
         if (enabled && (pause || !charge_required)) {
+            charge_target = false;
             configure(MP2724_REG_CHG_CTRL4, MP2724_EN_CHG_MASK, 0U, OP_CHARGE);return;
         }
         if (!enabled && enable) {
+            charge_target = true;
             configure(MP2724_REG_CHG_CTRL4, MP2724_EN_CHG_MASK, MP2724_EN_CHG_MASK, OP_CHARGE);return;
         }
     }
