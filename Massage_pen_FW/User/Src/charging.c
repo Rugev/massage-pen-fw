@@ -311,6 +311,7 @@ static void consume_result(I2C_DeviceResult result)
         observation.ntc_fresh = observation.input_ready && (ctrl4 & MP2724_EN_BUCK_MASK) != 0U;
         observation.cool = observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_COOL;
         observation.warm = observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_WARM;
+        if (observation.ntc_fresh) observation.paused = observation.warm;
         if (observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_COLD) observation.cold = true;
         if (observation.ntc_fresh && observation.ntc1 == MP2724_NTC1_FAULT_HOT) observation.hot = true;
         if (observation.cold || observation.hot) observation.configuration_ready = false;

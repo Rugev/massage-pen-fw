@@ -222,6 +222,7 @@ Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
 | 1 | Heater fault temperature |
 | 2 | Invalid tip sensor |
 | 3 | Invalid battery voltage |
+| 14 | Battery below charging admission threshold |
 | 4 | SYS_PG timeout |
 | 5 | SYS_PG lost |
 | 6 | Battery hot |
@@ -232,7 +233,6 @@ Bit order: heat LEDs 1/2/3 are bits 0/1/2; vibration LEDs 1/2/3 are bits 3/4/5.
 | 11 | Vibration communication/readback failure |
 | 12 | ADC acquisition failure |
 | 13 | Vibration calibration failure |
-| 14 | Battery below charging admission threshold |
 
 ## Open items for planning
 

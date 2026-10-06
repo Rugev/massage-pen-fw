@@ -619,7 +619,7 @@ static void test_independent_charge_display(void) {
  for(unsigned invalid=0U;invalid<3U;++invalid) {
   reset(0U);ready();charge_display_ready();app_charge.status_ms=20U;
   app_charge.active_charging=false;app_charge.completed=true;app_charge.phase=MP2724_CHG_STAT_DONE;
-  if(invalid==0U) app_charge.admitted=false;
+  if(invalid==0U) app_charge.status_ready=false;
   if(invalid==1U) app_charge.status_ms=20U-111U;
   if(invalid==2U) app_charge.phase=MP2724_CHG_STAT_PRECHARGE;
   render(20U);CHECK(!OUT(BAT_LED_G) && !OUT(LED_VIBRATION_1));

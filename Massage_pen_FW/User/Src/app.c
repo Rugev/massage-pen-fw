@@ -346,14 +346,16 @@ static void display_policy(uint32_t now, const Sensors_Snapshot *s, const Chargi
     }
     bool charging_display = app.state == APP_CHARGING || app.state == APP_CHARGING_RECOVERY;
     if (normal_operation() || charging_display) {
-        bool fresh_admitted = c->admitted && c->status_ready && c->input_valid &&
+        bool fresh_status = c->status_ready && c->input_valid &&
             (uint32_t)(now - c->status_ms) <= CHARGING_STATUS_MAX_AGE_MS;
         bool voltage_valid = s->available && s->battery_valid &&
             s->battery_fresh && s->battery_current_valid;
-        bool active = fresh_admitted && voltage_valid && !c->paused &&
+        bool active = fresh_status && c->admitted && voltage_valid && !c->paused &&
             (c->active_charging || c->topoff_active);
-        bool completed = fresh_admitted && c->completed &&
-            c->phase == MP2724_CHG_STAT_DONE && !c->paused;
+        bool completed = fresh_status && c->completed &&
+            c->phase == MP2724_CHG_STAT_DONE && !c->paused &&
+            !c->charger_fault && !c->watchdog_fault && !c->communication_fault &&
+            !c->cold && !c->hot;
         if (active) display.battery_pattern = LEDS_BATTERY_BREATHE;
         else if (completed || (normal_operation() && !c->paused))
             display.battery_pattern = LEDS_BATTERY_GREEN;

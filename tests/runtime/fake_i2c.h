@@ -3,6 +3,7 @@
 #include "i2c_device.h"
 extern I2C_HandleTypeDef fake_charger_i2c, fake_driver_i2c;
 void FakeI2C_Reset(void);
+uint32_t FakeI2C_ChargeEnableWrites(void);
 const I2C_DeviceOps *FakeI2C_Ops(void);
 bool FakeI2C_HasPending(I2C_HandleTypeDef *h);
 void FakeI2C_Complete(I2C_HandleTypeDef *h);

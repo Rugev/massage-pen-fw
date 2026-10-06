@@ -93,8 +93,61 @@ static void battery_only_validation_finishes(bool enable)
     }
     assert(!idle_leased);
 }
+static void completion_recovers_after_warm_pause(void)
+{
+    const Charging_IdleOps idle = {acquire_idle, release_idle};
+    const Charging_Profile charger = {.agreed=true,
+        .registers={0x10,0,(MP2724_VPRE_3000_MV << MP2724_VPRE_SHIFT) | 0x23, ((CHARGER_PRECHARGE_OPERATING_CURRENT_MA / MP2724_IPRE_STEP_MA) << MP2724_IPRE_SHIFT) | 3U,0x06,0x18,0x04,0x1e,0x20,0x03,0x20,0x51,0x21,0x4e,0,0},
+        .idle=&idle};
+    const Vibration_Profile motor = {.validated=true,
+        .mode=0x08, .control=0x80, .feedback_control=0x52, .rated_voltage=0x33, .od_clamp=0x44,
+        .lra_drive_control=0x07, .bemf_timing=0x22, .timing_control=0x0c, .auto_cal_time=0,
+        .calibration_duration_ms=250, .calibration_timeout_ms=400, .rtp={0,31,63,127}};
+    FakeI2C_Reset(); FakeHAL_ResetSensors(); idle_leased=false;
+    FakeHAL_SetPowerGood(GPIO_PIN_SET);
+    FakeHAL_SetInput(BUTTON_PWR_ON_GPIO_Port, BUTTON_PWR_ON_Pin, GPIO_PIN_RESET);
+    FakeI2C_Set(0x3fU, MP2724_REG_STATUS1, MP2724_VIN_GD_MASK | MP2724_VIN_RDY_MASK);
+    FakeI2C_Set(0x3fU, MP2724_REG_STATUS2, MP2724_CHG_STAT_PRECHARGE << MP2724_CHG_STAT_SHIFT);
+    const App_Bindings bindings = {.adc=&fake_adc, .sensors=FakeHAL_SensorOps(),
+        .charger_i2c=&fake_charger_i2c, .vibration_i2c=&fake_driver_i2c,
+        .charger_transport=FakeI2C_Ops(), .vibration_transport=FakeI2C_Ops(),
+        .charging=&charger, .vibration=&motor};
+    App_Init(&bindings, 0U);
+    uint32_t now=0U;
+    for (; now<1600U; ++now) integrated_tick(now);
+    assert(App_GetSnapshot().fault_code == 0U);
+    assert(Charging_GetObservation().admitted);
+    assert(App_GetSnapshot().state == APP_CHARGING);
+    FakeI2C_Set(0x3fU, MP2724_REG_STATUS2, MP2724_CHG_STAT_DONE << MP2724_CHG_STAT_SHIFT);
+    Charging_OnInterrupt();
+    for (unsigned i=0U; i<500U; ++i) integrated_tick(now++);
+    assert(Charging_GetObservation().completed);
+    assert(FakeHAL_GetOutput(BAT_LED_G_GPIO_Port, BAT_LED_G_Pin));
+    uint32_t enables = FakeI2C_ChargeEnableWrites();
+    FakeI2C_Set(0x3fU, MP2724_REG_STATUS3, MP2724_NTC1_FAULT_WARM << MP2724_NTC1_FAULT_SHIFT);
+    Charging_OnInterrupt();
+    for (unsigned i=0U; i<500U; ++i) integrated_tick(now++);
+    assert(Charging_GetObservation().warm && Charging_GetObservation().paused);
+    assert(!FakeHAL_GetOutput(BAT_LED_G_GPIO_Port, BAT_LED_G_Pin));
+    assert(!FakeHAL_GetOutput(BAT_LED_R_GPIO_Port, BAT_LED_R_Pin));
+    assert(Charging_GetObservation().completed && Charging_GetObservation().inhibited);
+    assert(!Charging_GetObservation().admitted);
+    FakeI2C_Set(0x3fU, MP2724_REG_STATUS3, 0U);
+    Charging_OnInterrupt();
+    for (unsigned i=0U; i<500U; ++i) integrated_tick(now++);
+    assert(FakeHAL_GetOutput(BAT_LED_G_GPIO_Port, BAT_LED_G_Pin));
+    assert(!FakeHAL_GetOutput(BAT_LED_R_GPIO_Port, BAT_LED_R_Pin));
+    assert(!Charging_GetObservation().warm && !Charging_GetObservation().paused);
+    assert(Charging_GetObservation().completed && Charging_GetObservation().inhibited);
+    assert(!Charging_GetObservation().admitted);
+    assert(!(FakeI2C_Get(0x3fU, MP2724_REG_CHG_CTRL4) & MP2724_EN_CHG_MASK));
+    assert(FakeI2C_ChargeEnableWrites() == enables);
+    assert(App_GetSnapshot().fault_code == 0U);
+}
 int main(void)
 {
+    completion_recovers_after_warm_pause();
+    puts("app real-module completed warm/cool display recovery without charger re-enable passed");
     missing_bindings_remain_gated();
     battery_only_validation_finishes(false);
     battery_only_validation_finishes(true);
